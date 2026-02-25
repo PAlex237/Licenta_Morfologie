@@ -9,6 +9,7 @@ class MorphoBackend:
     def load_image(self, file_path):
         """Citește imaginea în format Grayscale."""
         self.image_original = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+        self.image_processed = None  # <--- Acest rând resetează memoria!
         return self.image_original is not None
 
     def save_image(self, file_path):

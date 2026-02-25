@@ -83,12 +83,18 @@ class MorphoApp(ctk.CTk):
         if file_path:
             success = self.backend.load_image(file_path)
             if success:
+                # Afișăm imaginea originală nouă
                 self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
-                self.lbl_proc_img.configure(image=None, text="Așteaptă procesarea...")
+                
+                # --- AICI ESTE MODIFICAREA ---
+                # Curățăm zona de imagine procesată (o facem goală)
+                self.lbl_proc_img.configure(image="", text="Așteaptă procesarea...")
+                self.lbl_proc_img.image = None # Ștergem și referința din memorie
+                # -----------------------------
+                
                 self.status_bar.configure(text="Imagine încărcată cu succes.")
             else:
                 messagebox.showerror("Eroare", "Nu s-a putut citi imaginea.")
-
     def gui_save_image(self):
         file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG file", "*.png")])
         if file_path:
