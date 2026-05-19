@@ -16,7 +16,7 @@ class MorphoApp(ctk.CTk):
         self.title("MorfoMed")
         self.geometry("1200x850")
         
-        # Pornire automată maximizată pe tout ecranul
+        # Pornire automată maximizată pe tot ecranul
         self.after(0, lambda: self.state('zoomed'))
 
         self.backend = MorphoBackend()
@@ -189,7 +189,7 @@ class MorphoApp(ctk.CTk):
             img_proc = self.backend.batch_cache[file_name]
             self.display_image(img_proc, self.lbl_proc_img)
         else:
-            self.lbl_proc_img.configure(image="", text="Apasă 'PREVIZUALIZEAZĂ LOT' pentru rezultat.")
+            self.lbl_proc_img.configure(image=None, text="Apasă 'PREVIZUALIZEAZĂ LOT' pentru rezultat.")
             self.lbl_proc_img.image = None
 
     def on_tab_change(self):
