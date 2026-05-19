@@ -3,7 +3,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image
 import cv2
 import os
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 from backend_morph import MorphoBackend
 
 ctk.set_appearance_mode("Dark")  
@@ -130,9 +130,10 @@ class MorphoApp(ctk.CTk):
         base_name = os.path.basename(file_path).replace('.nii.gz', '').replace('.nii', '')
         
         # 2. Deschidem popup-ul cu sugestia precompletată
-        custom_folder_name = simpledialog.askstring("Nume Folder", 
-                                                    "Introduceți numele folderului pentru salvare:", 
-                                                    initialvalue=base_name)
+        # 2. Deschidem popup-ul MODERN cu sugestia precompletată
+        custom_folder_name = self.ask_custom_folder_name("Nume Folder", 
+                                                         "Introduceți numele folderului pentru salvare:", 
+                                                         initial_value=base_name)
         
         # Dacă utilizatorul a dat Cancel, oprim execuția
         if not custom_folder_name:
@@ -168,7 +169,66 @@ class MorphoApp(ctk.CTk):
         else:
             self.status_bar.configure(text="Eroare la conversie.")
             messagebox.showerror("Eroare", f"Eroare conversie: {info}")
+    def ask_custom_folder_name(self, title, prompt, initial_value):
+        """Creează un popup modern (CustomTkinter) pentru introducerea textului, centrat pe aplicație."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        
+        # Dimensiunile popup-ului
+        dialog_width = 450
+        dialog_height = 220
+        
+        # Actualizăm interfața pentru a lua coordonatele corecte și recente ale ferestrei principale
+        self.update_idletasks()
+        
+        # Calculăm coordonatele centrului ferestrei principale
+        app_x = self.winfo_rootx()
+        app_y = self.winfo_rooty()
+        app_width = self.winfo_width()
+        app_height = self.winfo_height()
+        
+        pos_x = app_x + (app_width // 2) - (dialog_width // 2)
+        pos_y = app_y + (app_height // 2) - (dialog_height // 2)
+        
+        # Aplicăm dimensiunile și coordonatele (format: "LățimexÎnălțime+X+Y")
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{pos_x}+{pos_y}")
+        dialog.resizable(False, False)
+        
+        # Facem fereastra modală (blochează interfața din spate până e închisă)
+        dialog.transient(self)
+        dialog.grab_set()
 
+        # Eticheta cu instrucțiuni
+        lbl = ctk.CTkLabel(dialog, text=prompt, font=ctk.CTkFont(size=14))
+        lbl.pack(pady=(20, 10), padx=20)
+
+        # Câmpul de introducere a textului
+        entry = ctk.CTkEntry(dialog, width=350, font=ctk.CTkFont(size=14))
+        entry.insert(0, initial_value)
+        entry.pack(pady=10)
+
+        result = [None]
+
+        def on_submit():
+            result[0] = entry.get()
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        # Cadru pentru butoane
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=20)
+
+        btn_ok = ctk.CTkButton(btn_frame, text="OK", width=100, command=on_submit)
+        btn_ok.pack(side="left", padx=10)
+
+        btn_cancel = ctk.CTkButton(btn_frame, text="Cancel", width=100, fg_color="gray", hover_color="#555555", command=on_cancel)
+        btn_cancel.pack(side="left", padx=10)
+
+        # Așteptăm ca utilizatorul să închidă fereastra
+        self.wait_window(dialog)
+        return result[0]
     def gui_apply_processing(self):
         operator = self.operator_var.get()
         k_size = int(self.kernel_slider.get())
@@ -184,9 +244,10 @@ class MorphoApp(ctk.CTk):
             sugestie = f"{parent_folder_name}_{operator}_{k_size}x{k_size}"
             
             # Cerem confirmarea/modificarea utilizatorului
-            custom_folder_name = simpledialog.askstring("Salvare Procesare Lot", 
-                                                        "Introduceți numele folderului pentru rezultate:", 
-                                                        initialvalue=sugestie)
+            # Cerem confirmarea/modificarea utilizatorului cu popup-ul MODERN
+            custom_folder_name = self.ask_custom_folder_name("Salvare Procesare Lot", 
+                                                             "Introduceți numele folderului pentru rezultate:", 
+                                                             initial_value=sugestie)
             
             if not custom_folder_name:
                 return # Utilizatorul a dat Cancel
