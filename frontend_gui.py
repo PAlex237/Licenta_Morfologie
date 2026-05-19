@@ -3,7 +3,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image
 import cv2
 import os
-from tkinter import filedialog, messagebox
+
 from backend_morph import MorphoBackend
 
 ctk.set_appearance_mode("Dark")  
@@ -17,7 +17,8 @@ class MorphoApp(ctk.CTk):
         self.geometry("1150x750")
 
         self.backend = MorphoBackend()
-        self.active_batch_folder = None
+        self.active_batch_folder = None  # Memorează folderul sursă curent pentru Pipeline
+
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -25,40 +26,42 @@ class MorphoApp(ctk.CTk):
         self._build_main_area()
 
     def _build_sidebar(self):
-        """Construiește panoul din stânga cu toate comenzile."""
+        """Construiește panoul din stânga cu meniurile structurate pe tab-uri."""
         self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
 
-        ctk.CTkLabel(self.sidebar_frame, text="Panou Control", font=ctk.CTkFont(size=20, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10))
+        ctk.CTkLabel(self.sidebar_frame, text="Meniu Principal", font=ctk.CTkFont(size=20, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        # OPERAȚII STANDARD
-        ctk.CTkButton(self.sidebar_frame, text="Încărcare Imagine (2D)", command=self.gui_load_image).grid(row=1, column=0, padx=20, pady=5)
-        ctk.CTkButton(self.sidebar_frame, text="Salvare Rezultat", fg_color="green", command=self.gui_save_image).grid(row=2, column=0, padx=20, pady=5)
+        # --- TABVIEW PENTRU SCHIMBAREA MODULUI DE LUCRU ---
+        self.tabview = ctk.CTkTabview(self.sidebar_frame, command=self.on_tab_change)
+        self.tabview.grid(row=1, column=0, padx=15, pady=5, sticky="ew")
+        
+        self.tabview.add("Single Image")
+        self.tabview.add("Pipeline Medical")
+        
+        # --- CONTINUT TAB: SINGLE IMAGE ---
+        ctk.CTkButton(self.tabview.tab("Single Image"), text="Încărcare Imagine", command=self.gui_load_image).pack(pady=(15, 10), fill="x", padx=10)
+        ctk.CTkButton(self.tabview.tab("Single Image"), text="Salvare Rezultat", fg_color="green", hover_color="#006400", command=self.gui_save_image).pack(pady=10, fill="x", padx=10)
 
-        ctk.CTkLabel(self.sidebar_frame, text="Selectare Operator:", anchor="w").grid(row=3, column=0, padx=20, pady=(10, 0))
+        # --- CONTINUT TAB: PIPELINE MEDICAL ---
+        ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="Conversie Nouă (.nii)", fg_color="#1f538d", command=self.gui_convert_nii).pack(pady=(15, 10), fill="x", padx=10)
+        ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="Încarcă Set Existent", fg_color="#b35900", hover_color="#8c4600", command=self.gui_load_dataset).pack(pady=10, fill="x", padx=10)
+
+        # --- COMENZI GLOBALE (Vizibile indiferent de tab) ---
+        ctk.CTkLabel(self.sidebar_frame, text="Setări Procesare:", font=ctk.CTkFont(weight="bold"), anchor="w").grid(row=2, column=0, padx=20, pady=(20, 5))
+        
         self.operator_var = ctk.StringVar(value="Deschidere")
-        ctk.CTkOptionMenu(self.sidebar_frame, variable=self.operator_var, values=["Eroziune", "Dilatare", "Deschidere", "Închidere", "Top-Hat", "Black-Hat"]).grid(row=4, column=0, padx=20, pady=5)
+        ctk.CTkOptionMenu(self.sidebar_frame, variable=self.operator_var, values=["Eroziune", "Dilatare", "Deschidere", "Închidere", "Top-Hat", "Black-Hat"]).grid(row=3, column=0, padx=20, pady=5)
 
         self.slider_label = ctk.CTkLabel(self.sidebar_frame, text="Dimensiune Kernel (3x3):", anchor="w")
-        self.slider_label.grid(row=5, column=0, padx=20, pady=(10, 0))
+        self.slider_label.grid(row=4, column=0, padx=20, pady=(15, 0))
         self.kernel_slider = ctk.CTkSlider(self.sidebar_frame, from_=3, to=15, number_of_steps=6, command=self.update_slider_label)
         self.kernel_slider.set(3)
-        self.kernel_slider.grid(row=6, column=0, padx=20, pady=5)
+        self.kernel_slider.grid(row=5, column=0, padx=20, pady=5)
 
-        # CONFIGURARE MOD PROCESSARE (SINGLE VS BATCH)
-        self.batch_mode_var = ctk.BooleanVar(value=False)
-        self.batch_switch = ctk.CTkSwitch(self.sidebar_frame, text="Mod Batch (Tot folderul)", variable=self.batch_mode_var, command=self.toggle_batch_mode)
-        self.batch_switch.grid(row=7, column=0, padx=20, pady=10)
-
-        # BUTON EXECUTĂ
-        self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="APLICĂ PROCESARE", height=40, font=ctk.CTkFont(weight="bold"), command=self.gui_apply_processing)
-        self.btn_apply.grid(row=8, column=0, padx=20, pady=15)
-
-        # PIPELINE MEDICAL (.NII)
-        ctk.CTkLabel(self.sidebar_frame, text="-----------------------------------", text_color="gray").grid(row=9, column=0, pady=5)
-        ctk.CTkLabel(self.sidebar_frame, text="Pipeline Medical (3D)", font=ctk.CTkFont(size=14, weight="bold"), text_color="#1f538d").grid(row=10, column=0, padx=20, pady=2)
-        
-        ctk.CTkButton(self.sidebar_frame, text="Convertește Volum .nii", fg_color="#1f538d", command=self.gui_convert_nii).grid(row=11, column=0, padx=20, pady=10)
+        # BUTON EXECUTĂ (Dinamic în funcție de tab)
+        self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="APLICĂ PE IMAGINE", height=40, font=ctk.CTkFont(weight="bold"), command=self.gui_apply_processing)
+        self.btn_apply.grid(row=6, column=0, padx=20, pady=30)
 
     def _build_main_area(self):
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -84,104 +87,15 @@ class MorphoApp(ctk.CTk):
         self.status_bar = ctk.CTkLabel(self.main_frame, text="Stare: Așteptare input...", anchor="w", text_color="lightgreen")
         self.status_bar.grid(row=1, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
 
-    def update_slider_label(self, value):
-        val = int(value)
-        if val % 2 == 0: val += 1
-        self.slider_label.configure(text=f"Dimensiune Kernel ({val}x{val}):")
-
-    def toggle_batch_mode(self):
-        if self.batch_mode_var.get():
-            self.btn_apply.configure(text="APLICĂ PE TOT FOLDERUL", fg_color="orange", hover_color="#cc7a00")
-            self.status_bar.configure(text="Stare: Mod Batch activat. Operația se va aplica pe tot folderul converted_2d.")
-        else:
-            self.btn_apply.configure(text="APLICĂ PROCESARE", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#3269a0", "#14395e"])
-            self.status_bar.configure(text="Stare: Mod Single activat. Procesare pe imaginea curentă.")
-
-    def gui_load_image(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.tif")])
-        if file_path:
-            success = self.backend.load_image(file_path)
-            if success:
-                self.active_batch_folder = os.path.dirname(file_path) # <--- Reține folderul sursă
-                # ... restul codului ramane la fel ...
-                self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
-                self.lbl_proc_img.configure(image="", text="Așteaptă procesarea...")
-                self.lbl_proc_img.image = None
-                self.status_bar.configure(text=f"Imagine încărcată: {os.path.basename(file_path)}")
-            else:
-                messagebox.showerror("Eroare", "Nu s-a putut citi imaginea.")
-
-    def gui_save_image(self):
-        if self.batch_mode_var.get():
-            messagebox.showinfo("Informație", "În modul Batch, salvarea se face automat în datasets/processed_2d/!")
-            return
-        file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG file", "*.png")])
-        if file_path:
-            success = self.backend.save_image(file_path)
-            if success:
-                self.status_bar.configure(text=f"Salvat la: {file_path}")
-
-    def gui_convert_nii(self):
-        file_path = filedialog.askopenfilename(filetypes=[("NIfTI medical files", "*.nii *.nii.gz")])
-        if not file_path:
-            return
-            
-        # 1. Generăm sugestia de nume bazată pe fișier (fără extensii)
-        base_name = os.path.basename(file_path).replace('.nii.gz', '').replace('.nii', '')
-        
-        # 2. Deschidem popup-ul cu sugestia precompletată
-        # 2. Deschidem popup-ul MODERN cu sugestia precompletată
-        custom_folder_name = self.ask_custom_folder_name("Nume Folder", 
-                                                         "Introduceți numele folderului pentru salvare:", 
-                                                         initial_value=base_name)
-        
-        # Dacă utilizatorul a dat Cancel, oprim execuția
-        if not custom_folder_name:
-            return
-            
-        # 3. Construim calea finală
-        output_dir = os.path.join("datasets", "converted_2d", custom_folder_name)
-            
-        self.status_bar.configure(text=f"Se convertește volumul în {custom_folder_name}... Așteptați...")
-        self.update_idletasks()
-        
-        # Trimitem calea personalizată către Backend
-        success, info = self.backend.convert_nii_volume(file_path, output_folder=output_dir)
-        
-        if success:
-            self.active_batch_folder = output_dir # Salvăm folderul ca "activ" pentru procesare
-            num_slices = info 
-            middle_idx = num_slices // 2 
-            
-            self.status_bar.configure(text=f"Succes! S-au extras {num_slices} felii în '{output_dir}'.")
-            messagebox.showinfo("Succes", f"Volumul a fost tăiat în {num_slices} felii 2D!\nLocație: {output_dir}")
-            
-            nume_fisier = f"slice_{middle_idx:03d}.png"
-            preview_path = os.path.join(output_dir, nume_fisier) 
-            
-            if not os.path.exists(preview_path):
-                preview_path = os.path.join(output_dir, "slice_000.png")
-                
-            if os.path.exists(preview_path):
-                self.backend.load_image(preview_path)
-                self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
-                self.lbl_proc_img.configure(image="", text="Așteaptă procesarea lotului...")
-        else:
-            self.status_bar.configure(text="Eroare la conversie.")
-            messagebox.showerror("Eroare", f"Eroare conversie: {info}")
     def ask_custom_folder_name(self, title, prompt, initial_value):
-        """Creează un popup modern (CustomTkinter) pentru introducerea textului, centrat pe aplicație."""
+        """Creează un popup modern centrat pe aplicație."""
         dialog = ctk.CTkToplevel(self)
         dialog.title(title)
         
-        # Dimensiunile popup-ului
         dialog_width = 450
         dialog_height = 220
-        
-        # Actualizăm interfața pentru a lua coordonatele corecte și recente ale ferestrei principale
         self.update_idletasks()
         
-        # Calculăm coordonatele centrului ferestrei principale
         app_x = self.winfo_rootx()
         app_y = self.winfo_rooty()
         app_width = self.winfo_width()
@@ -190,19 +104,14 @@ class MorphoApp(ctk.CTk):
         pos_x = app_x + (app_width // 2) - (dialog_width // 2)
         pos_y = app_y + (app_height // 2) - (dialog_height // 2)
         
-        # Aplicăm dimensiunile și coordonatele (format: "LățimexÎnălțime+X+Y")
         dialog.geometry(f"{dialog_width}x{dialog_height}+{pos_x}+{pos_y}")
         dialog.resizable(False, False)
-        
-        # Facem fereastra modală (blochează interfața din spate până e închisă)
         dialog.transient(self)
         dialog.grab_set()
 
-        # Eticheta cu instrucțiuni
         lbl = ctk.CTkLabel(dialog, text=prompt, font=ctk.CTkFont(size=14))
         lbl.pack(pady=(20, 10), padx=20)
 
-        # Câmpul de introducere a textului
         entry = ctk.CTkEntry(dialog, width=350, font=ctk.CTkFont(size=14))
         entry.insert(0, initial_value)
         entry.pack(pady=10)
@@ -216,7 +125,6 @@ class MorphoApp(ctk.CTk):
         def on_cancel():
             dialog.destroy()
 
-        # Cadru pentru butoane
         btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         btn_frame.pack(pady=20)
 
@@ -226,58 +134,152 @@ class MorphoApp(ctk.CTk):
         btn_cancel = ctk.CTkButton(btn_frame, text="Cancel", width=100, fg_color="gray", hover_color="#555555", command=on_cancel)
         btn_cancel.pack(side="left", padx=10)
 
-        # Așteptăm ca utilizatorul să închidă fereastra
         self.wait_window(dialog)
         return result[0]
+
+    def update_slider_label(self, value):
+        val = int(value)
+        if val % 2 == 0: val += 1
+        self.slider_label.configure(text=f"Dimensiune Kernel ({val}x{val}):")
+
+    def on_tab_change(self):
+        """Schimbă textul și culoarea butonului de execuție în funcție de meniul activ."""
+        current_tab = self.tabview.get()
+        if current_tab == "Pipeline Medical":
+            self.btn_apply.configure(text="PROCESEAZĂ TOT SETUL", fg_color="#b35900", hover_color="#8c4600")
+            self.status_bar.configure(text="Stare: Mod Pipeline activ. Operația se va aplica pe întregul folder.")
+        else:
+            self.btn_apply.configure(text="APLICĂ PE IMAGINE", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#3269a0", "#14395e"])
+            self.status_bar.configure(text="Stare: Mod Single activ. Procesare doar pe imaginea curentă.")
+
+    def gui_load_image(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.tif")])
+        if file_path:
+            success = self.backend.load_image(file_path)
+            if success:
+                self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+                self.lbl_proc_img.configure(image="", text="Așteaptă procesarea...")
+                self.lbl_proc_img.image = None
+                self.status_bar.configure(text=f"Imagine încărcată: {os.path.basename(file_path)}")
+            else:
+                messagebox.showerror("Eroare", "Nu s-a putut citi imaginea.")
+
+    def gui_save_image(self):
+        file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG file", "*.png")])
+        if file_path:
+            success = self.backend.save_image(file_path)
+            if success:
+                self.status_bar.configure(text=f"Salvat la: {file_path}")
+
+    def gui_load_dataset(self):
+        """NOU: Încarcă un folder cu imagini deja convertite."""
+        # Presupunem că folderele noastre stau în datasets/converted_2d
+        initial_dir = os.path.abspath(os.path.join("datasets", "converted_2d"))
+        if not os.path.exists(initial_dir):
+            os.makedirs(initial_dir, exist_ok=True)
+            
+        folder_path = filedialog.askdirectory(title="Selectează setul de date convertit", initialdir=initial_dir)
+        if not folder_path:
+            return
+            
+        # Verificăm dacă sunt poze png în el
+        files = sorted([f for f in os.listdir(folder_path) if f.endswith('.png')])
+        if not files:
+            messagebox.showerror("Eroare", f"Folderul '{os.path.basename(folder_path)}' nu conține imagini .png!")
+            return
+            
+        self.active_batch_folder = folder_path
+        count = len(files)
+        middle_idx = count // 2
+        preview_path = os.path.join(folder_path, files[middle_idx])
+        
+        # Încărcăm preview-ul pe ecran
+        self.backend.load_image(preview_path)
+        self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+        self.lbl_proc_img.configure(image="", text="Așteaptă procesarea lotului...")
+        
+        self.status_bar.configure(text=f"Set date încărcat: '{os.path.basename(folder_path)}' ({count} imagini).")
+
+    def gui_convert_nii(self):
+        file_path = filedialog.askopenfilename(filetypes=[("NIfTI medical files", "*.nii *.nii.gz")])
+        if not file_path:
+            return
+            
+        base_name = os.path.basename(file_path).replace('.nii.gz', '').replace('.nii', '')
+        custom_folder_name = self.ask_custom_folder_name("Nume Folder", "Introduceți numele folderului pentru salvare:", initial_value=base_name)
+        if not custom_folder_name:
+            return
+            
+        output_dir = os.path.join("datasets", "converted_2d", custom_folder_name)
+        self.status_bar.configure(text=f"Se convertește volumul în {custom_folder_name}... Așteptați...")
+        self.update_idletasks()
+        
+        success, info = self.backend.convert_nii_volume(file_path, output_folder=output_dir)
+        
+        if success:
+            self.active_batch_folder = output_dir 
+            num_slices = info 
+            
+            self.status_bar.configure(text=f"Succes! S-au extras {num_slices} felii în '{output_dir}'.")
+            
+            # Ne bazăm pe sistemul de fișiere pentru a găsi fix fisierul din mijloc
+            files = sorted([f for f in os.listdir(output_dir) if f.endswith('.png')])
+            middle_idx = len(files) // 2
+            preview_path = os.path.join(output_dir, files[middle_idx])
+                
+            if os.path.exists(preview_path):
+                self.backend.load_image(preview_path)
+                self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+                self.lbl_proc_img.configure(image="", text="Așteaptă procesarea lotului...")
+        else:
+            self.status_bar.configure(text="Eroare la conversie.")
+            messagebox.showerror("Eroare", f"Eroare conversie: {info}")
+
     def gui_apply_processing(self):
         operator = self.operator_var.get()
         k_size = int(self.kernel_slider.get())
+        current_tab = self.tabview.get()
         
-        if self.batch_mode_var.get():
-            # Ne asigurăm că știm ce folder procesăm
+        if current_tab == "Pipeline Medical":
+            # --- MOD BATCH (PROCESARE FOLDER) ---
             if not self.active_batch_folder:
-                messagebox.showwarning("Avertisment", "Nu există niciun folder activ! Vă rugăm să convertiți un volum .nii sau să încărcați o imagine dintr-un folder.")
+                messagebox.showwarning("Avertisment", "Nu există niciun set de date activ! Vă rugăm să încărcați un set existent sau să convertiți un .nii.")
                 return
 
-            # Construim sugestia inteligentă de nume
             parent_folder_name = os.path.basename(self.active_batch_folder)
             sugestie = f"{parent_folder_name}_{operator}_{k_size}x{k_size}"
             
-            # Cerem confirmarea/modificarea utilizatorului
-            # Cerem confirmarea/modificarea utilizatorului cu popup-ul MODERN
-            custom_folder_name = self.ask_custom_folder_name("Salvare Procesare Lot", 
-                                                             "Introduceți numele folderului pentru rezultate:", 
-                                                             initial_value=sugestie)
-            
+            custom_folder_name = self.ask_custom_folder_name("Salvare Procesare Lot", "Introduceți numele folderului pentru rezultate:", initial_value=sugestie)
             if not custom_folder_name:
-                return # Utilizatorul a dat Cancel
+                return 
                 
             output_dir = os.path.join("datasets", "processed_2d", custom_folder_name)
-
-            self.status_bar.configure(text=f"Se procesează lotul în {custom_folder_name}...")
+            self.status_bar.configure(text=f"Se procesează setul în '{custom_folder_name}'...")
             self.update_idletasks()
             
-            # Apelăm Backend-ul cu folderele personalizate
-            success, count = self.backend.batch_process_folder(input_folder=self.active_batch_folder, 
-                                                               output_folder=output_dir, 
-                                                               operator=operator, 
-                                                               k_size=k_size)
+            success, count = self.backend.batch_process_folder(input_folder=self.active_batch_folder, output_folder=output_dir, operator=operator, k_size=k_size)
             if success:
-                self.status_bar.configure(text=f"Mod Batch finalizat! Salvat în '{output_dir}'.")
-                messagebox.showinfo("Succes Batch", f"S-au procesat {count} imagini!\nRezultatele sunt în: {output_dir}")
+                self.status_bar.configure(text=f"Pipeline finalizat! Salvat în '{output_dir}'.")
                 
-                middle_idx = count // 2
-                nume_fisier = f"slice_{middle_idx:03d}.png"
-                preview_path = os.path.join(output_dir, nume_fisier)
-                
-                if not os.path.exists(preview_path):
-                    preview_path = os.path.join(output_dir, "slice_000.png")
-                
-                if os.path.exists(preview_path):
-                    img_proc = cv2.imread(preview_path, cv2.IMREAD_GRAYSCALE)
-                    self.display_image(img_proc, self.lbl_proc_img)
+                files = sorted([f for f in os.listdir(output_dir) if f.endswith('.png')])
+                if files:
+                    middle_idx = len(files) // 2
+                    preview_path = os.path.join(output_dir, files[middle_idx])
+                    if os.path.exists(preview_path):
+                        img_proc = cv2.imread(preview_path, cv2.IMREAD_GRAYSCALE)
+                        self.display_image(img_proc, self.lbl_proc_img)
             else:
                 messagebox.showwarning("Eroare", count)
+        else:
+            # --- MOD SINGLE (POZĂ INDIVIDUALĂ) ---
+            self.status_bar.configure(text="Se procesează imaginea...")
+            self.update_idletasks()
+            success = self.backend.apply_operator(operator, k_size)
+            if success:
+                self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
+                self.status_bar.configure(text=f"Procesare {operator} finalizată!")
+            else:
+                messagebox.showwarning("Avertisment", "Încărcați o imagine mai întâi din meniul 'Single Image'!")
 
     def display_image(self, cv_img, label_widget):
         if len(cv_img.shape) == 2: 
