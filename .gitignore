@@ -1,2 +1,5 @@
 __pycache__/
-datasets/
+datasets/converted_2d/
+datasets/processed_2d/
+*.nii
+*.nii.gz
