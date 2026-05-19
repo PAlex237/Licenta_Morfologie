@@ -111,3 +111,52 @@ class MorphoBackend:
             self.image_processed = cv2.morphologyEx(self.image_original, cv2.MORPH_BLACKHAT, kernel)
         
         return True
+    def batch_process_to_memory(self, input_folder, operator, k_size):
+        """Procesează tot folderul și ține rezultatele în memoria RAM pentru preview."""
+        self.batch_cache = {} # Aici vom ține imaginile
+        
+        if not os.path.exists(input_folder):
+            return False, "Folderul de intrare nu există!"
+            
+        files = [f for f in os.listdir(input_folder) if f.endswith('.png')]
+        if not files:
+            return False, "Nu s-au găsit imagini .png!"
+            
+        if k_size % 2 == 0:
+            k_size += 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_size, k_size))
+        
+        for file_name in files:
+            img_path = os.path.join(input_folder, file_name)
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            
+            if operator == "Eroziune":
+                proc = cv2.erode(img, kernel, iterations=1)
+            elif operator == "Dilatare":
+                proc = cv2.dilate(img, kernel, iterations=1)
+            elif operator == "Deschidere":
+                proc = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
+            elif operator == "Închidere":
+                proc = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel)
+            elif operator == "Top-Hat":
+                proc = cv2.morphologyEx(img, cv2.MORPH_TOPHAT, kernel)
+            elif operator == "Black-Hat":
+                proc = cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, kernel)
+            else:
+                proc = img
+                
+            # Salvăm imaginea generată în dicționar (RAM), NU pe disc
+            self.batch_cache[file_name] = proc
+            
+        return True, len(files)
+
+    def save_batch_from_memory(self, output_folder):
+        """Ia pozele din RAM și le scrie pe hard disk doar la cerere."""
+        if not hasattr(self, 'batch_cache') or not self.batch_cache:
+            return False, "Nu există date procesate în memorie!"
+            
+        os.makedirs(output_folder, exist_ok=True)
+        for file_name, img in self.batch_cache.items():
+            cv2.imwrite(os.path.join(output_folder, file_name), img)
+            
+        return True, len(self.batch_cache)
