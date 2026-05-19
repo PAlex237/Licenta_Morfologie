@@ -13,10 +13,10 @@ class MorphoApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("MorphoMed - Medical Slice Viewer & Processor")
+        self.title("MorfoMed")
         self.geometry("1200x850")
         
-        # Pornire automată maximizată pe tot ecranul
+        # Pornire automată maximizată pe tout ecranul
         self.after(0, lambda: self.state('zoomed'))
 
         self.backend = MorphoBackend()
@@ -49,12 +49,12 @@ class MorphoApp(ctk.CTk):
         ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="Conversie Nouă (.nii)", height=35, fg_color="#1f538d", hover_color="#14395e", command=self.gui_convert_nii).pack(pady=(15, 10), fill="x", padx=10)
         ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="Încarcă Set Existent", height=35, fg_color="#b35900", hover_color="#8c4600", command=self.gui_load_dataset).pack(pady=10, fill="x", padx=10)
         
-        # BUTON SALVARE LOT (Verde smarald elegant, dezactivat inițial)
+        # BUTON SALVARE LOT
         self.btn_save_batch = ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="SALVEAZĂ LOTUL", height=40, font=ctk.CTkFont(weight="bold"), fg_color="#28a745", hover_color="#218838", state="disabled", command=self.gui_save_batch)
         self.btn_save_batch.pack(pady=(25, 10), fill="x", padx=10)
 
         # SETARI GLOBALE
-        ctk.CTkLabel(self.sidebar_frame, text="Setări Procesare:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(row=2, column=0, padx=20, pady=(25, 10), sticky="w")
+        ctk.CTkLabel(self.sidebar_frame, text="Setări Processare:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(row=2, column=0, padx=20, pady=(25, 10), sticky="w")
         
         self.operator_var = ctk.StringVar(value="Deschidere")
         ctk.CTkOptionMenu(self.sidebar_frame, variable=self.operator_var, values=["Eroziune", "Dilatare", "Deschidere", "Închidere", "Top-Hat", "Black-Hat"], height=35).grid(row=3, column=0, padx=20, pady=5, sticky="ew")
@@ -65,7 +65,7 @@ class MorphoApp(ctk.CTk):
         self.kernel_slider.set(3)
         self.kernel_slider.grid(row=5, column=0, padx=20, pady=5, sticky="ew")
 
-        self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="APLICĂ PE IMAGINE", height=45, font=ctk.CTkFont(size=14, weight="bold"), command=self.gui_apply_processing)
+        self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="EXECUȚIE OPERATOR", height=45, font=ctk.CTkFont(size=14, weight="bold"), command=self.gui_apply_processing)
         self.btn_apply.grid(row=6, column=0, padx=20, pady=35, sticky="ew")
 
     def _build_main_area(self):
@@ -83,7 +83,7 @@ class MorphoApp(ctk.CTk):
 
         frame_proc = ctk.CTkFrame(self.main_frame, corner_radius=10)
         frame_proc.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
-        ctk.CTkLabel(frame_proc, text="Rezultat Procesare (Preview RAM)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
+        ctk.CTkLabel(frame_proc, text="Rezultat Procesare (Previzualizare)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
         self.lbl_proc_img = ctk.CTkLabel(frame_proc, text="Așteptare prelucrare...", text_color="gray")
         self.lbl_proc_img.pack(expand=True, fill="both", padx=15, pady=15)
 
@@ -99,7 +99,7 @@ class MorphoApp(ctk.CTk):
         self.slice_slider.pack(fill="x", padx=30, pady=(5, 15))
         self.nav_frame.grid_remove() 
 
-        self.status_bar = ctk.CTkLabel(self.main_frame, text=" Stare: Gata de lucru.", anchor="w", font=ctk.CTkFont(size=13), text_color="#a3a3a3")
+        self.status_bar = ctk.CTkLabel(self.main_frame, text="Stare: Așteptare date de intrare.", anchor="w", font=ctk.CTkFont(size=13), text_color="#a3a3a3")
         self.status_bar.grid(row=2, column=0, columnspan=2, padx=20, pady=(0, 10), sticky="ew")
 
     def show_custom_message(self, title, message, msg_type="info"):
@@ -117,7 +117,6 @@ class MorphoApp(ctk.CTk):
         dialog.transient(self)
         dialog.grab_set()
 
-        # Alegem culoarea tematică în funcție de tipul mesajului
         theme_color = "#28a745" if msg_type == "info" else "#d9534f"
 
         lbl_title = ctk.CTkLabel(dialog, text=title, font=ctk.CTkFont(size=16, weight="bold"), text_color=theme_color)
@@ -199,7 +198,7 @@ class MorphoApp(ctk.CTk):
             self.btn_apply.configure(text="PREVIZUALIZEAZĂ LOT", fg_color="#b35900", hover_color="#8c4600")
             if self.active_batch_folder: self.nav_frame.grid()
         else:
-            self.btn_apply.configure(text="APLICĂ PE IMAGINE", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#3269a0", "#14395e"])
+            self.btn_apply.configure(text="EXECUȚIE OPERATOR", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#3269a0", "#14395e"])
             self.nav_frame.grid_remove()
 
     def _init_slider(self, folder_path):
@@ -242,27 +241,25 @@ class MorphoApp(ctk.CTk):
                 return
 
             self.active_batch_folder = d  
-            
             self._init_slider(d)          
-            
-            self.status_bar.configure(text=f" Stare: Set date încărcat '{os.path.basename(d)}'.")
+            self.status_bar.configure(text=f"Stare: Set date încărcat '{os.path.basename(d)}'.")
 
     def gui_convert_nii(self):
         p = filedialog.askopenfilename(filetypes=[("NIfTI", "*.nii *.nii.gz")])
         if not p: return
-        name = self.ask_custom_folder_name("Conversie NIfTI", "Alege un nume pentru folderul de conversie:", os.path.basename(p).split('.')[0])
+        name = self.ask_custom_folder_name("Configurare Export NIfTI", "Introduceți un nume pentru setul 2D rezultat:", os.path.basename(p).split('.')[0])
         if name:
             out = os.path.join("datasets", "converted_2d", name)
-            self.status_bar.configure(text=f" Stare: Se extrag feliile din volum. Vă rugăm așteptați...")
+            self.status_bar.configure(text=f"Stare: Inițializare decodificare volum NIfTI...")
             self.update_idletasks()
             suc, info = self.backend.convert_nii_volume(p, out)
             if suc:
                 self.active_batch_folder = out
                 self._init_slider(out)
-                self.status_bar.configure(text=f" Stare: Conversie finalizată. Extrase {info} felii.")
+                self.status_bar.configure(text=f"Stare: Pipeline finalizat cu succes. Navigare activă.")
                 self.show_custom_message("Succes Conversie", f"Volumul medical 3D a fost tăiat în {info} felii 2D cu succes.", "info")
             else:
-                self.status_bar.configure(text=" Stare: Eroare la conversie.")
+                self.status_bar.configure(text="Stare: Eroare la conversie.")
                 self.show_custom_message("Eroare Critică", f"Nu s-a putut converti volumul NIfTI:\n{info}", "error")
 
     def gui_apply_processing(self):
@@ -273,18 +270,18 @@ class MorphoApp(ctk.CTk):
                 self.show_custom_message("Avertisment", "Vă rugăm să încărcați un set de date existent sau să convertiți un volum .nii mai întâi.", "error")
                 return
             
-            self.status_bar.configure(text=f" Stare: Se procesează {op} ({ks}x{ks}) în memoria RAM... Așteptați.")
+            self.status_bar.configure(text=f"Stare: Se procesează {op} ({ks}x{ks}) în memoria RAM... Așteptați.")
             self.update_idletasks()
             
             suc, count = self.backend.batch_process_to_memory(self.active_batch_folder, op, ks)
             if suc:
-                self.status_bar.configure(text=f" Stare: Previzualizare gata! Verifică rezultatele din slider.")
+                self.status_bar.configure(text=f"Stare: Pipeline finalizat cu succes. Navigare activă.")
                 self.btn_save_batch.configure(state="normal") 
                 self.on_slice_slider_move(self.slice_slider.get()) 
         else:
             if self.backend.apply_operator(op, ks):
                 self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
-                self.status_bar.configure(text=f" Stare: Filtru aplicat pe imaginea curentă.")
+                self.status_bar.configure(text=f"Stare: Filtru aplicat pe imaginea curentă.")
             else:
                 self.show_custom_message("Avertisment", "Încărcați o imagine binară/grayscale înainte de a aplica operatorul.", "error")
 
@@ -293,17 +290,18 @@ class MorphoApp(ctk.CTk):
         ks = int(self.kernel_slider.get())
         sugestie = f"{os.path.basename(self.active_batch_folder)}_{op}_{ks}x{ks}"
         
-        name = self.ask_custom_folder_name("Salvare Definitivă Dischetă", "Nume folder pentru a salva rezultatele:", sugestie)
+        name = self.ask_custom_folder_name("Salvare Definitivă", "Introduceți numele directorului de export:", sugestie)
         if name:
             out = os.path.join("datasets", "processed_2d", name)
             suc, count = self.backend.save_batch_from_memory(out)
             if suc:
-                self.status_bar.configure(text=f" Stare: Lot de {count} imagini salvat cu succes.")
+                self.status_bar.configure(text=f"Stare: Lot de {count} imagini salvat cu succes.")
                 self.show_custom_message("Lot Salvat", f"S-au salvat definitiv {count} felii procesate în folderul:\nprocessed_2d/{name}", "info")
 
     def update_slider_label(self, v):
         val = int(v); 
         if val % 2 == 0: val += 1
+        self.sidebar_frame.focus() 
         self.slider_label.configure(text=f"Dimensiune Kernel ({val}x{val}):")
 
     def display_image(self, cv_img, lbl):
