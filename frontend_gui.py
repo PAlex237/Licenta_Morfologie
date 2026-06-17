@@ -264,14 +264,17 @@ class MorphoApp(ctk.CTk):
             self.lbl_proc_img.configure(image=blank_img, text="Apasă 'PREVIZUALIZEAZĂ LOT' pentru rezultat.")
             self.lbl_proc_img.image = blank_img
 
-    def on_tab_change(self):
-        tab = self.tabview.get()
-        if tab == "Pipeline Medical":
-            self.btn_apply.configure(text="PREVIZUALIZEAZĂ LOT", fg_color="#b35900", hover_color="#8c4600")
-            if self.active_batch_folder: self.nav_frame.grid()
-        else:
-            self.btn_apply.configure(text="EXECUȚIE OPERATOR", fg_color=["#3a7ebf", "#1f538d"], hover_color=["#3269a0", "#14395e"])
-            self.nav_frame.grid_remove()
+    def on_tab_change(self): # (sau cum se numește funcția ta)
+        tab_activ = self.tabview.get()
+        
+        self.reset_session()
+        
+        if tab_activ == "Pipeline Medical":
+            self.status_bar.configure(text="Stare: Mod Pipeline activat. Încărcați un director.")
+            
+        elif tab_activ == "Single Image":
+            # Logica pentru imagine unică
+            self.status_bar.configure(text="Stare: Mod Imagine Unică activat.")
 
     def _init_slider(self, folder_path):
         self.slice_files_list = sorted([f for f in os.listdir(folder_path) if f.endswith('.png')])
