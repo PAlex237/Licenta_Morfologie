@@ -71,17 +71,16 @@ class MorphoApp(ctk.CTk):
 
         # --- PANOUL DE SESIUNE (ISTORIC) ---
         # Creăm un cadru dedicat pentru istoric, pe care îl punem în interfață (ex: în partea dreaptă)
-        self.session_panel = ctk.CTkFrame(self.sidebar_frame) # Înlocuiește self.main_window cu părintele corect din codul tău
-        self.session_panel.grid(row=15, column=0, sticky="nsew", padx=10, pady=10)
+        self.session_panel = ctk.CTkFrame(self)
+        self.session_panel.grid(row=0, column=2, sticky="nsew", padx=(0, 10), pady=10)
 
         self.sidebar_frame.grid_rowconfigure(15, weight=1) 
 
-                # Titlul panoului
         self.session_title = ctk.CTkLabel(self.session_panel, text="Istoric Sesiune", font=("Arial", 16, "bold"))
         self.session_title.pack(pady=10)
 
         # Zona scrollabilă (AICI vor apărea operațiile)
-        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=250, height=400)
+        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=300, height=600)
         self.session_scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Butoane de control global al sesiunii
