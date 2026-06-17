@@ -32,7 +32,7 @@ class MorphoApp(ctk.CTk):
         self._build_main_area()
 
     def _build_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=280, corner_radius=0)
+        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
 
         ctk.CTkLabel(self.sidebar_frame, text="Meniu Principal", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, padx=20, pady=(25, 15))
@@ -80,11 +80,11 @@ class MorphoApp(ctk.CTk):
         self.session_title.pack(pady=10)
 
         # Zona scrollabilă (AICI vor apărea operațiile)
-        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=300, height=600)
+        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=200, height=600)
         self.session_scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Butoane de control global al sesiunii
-        self.btn_undo = ctk.CTkButton(self.session_panel, text="↩ Undo (Anulează ultimul)", command=self.undo_operation)
+        self.btn_undo = ctk.CTkButton(self.session_panel, text="↩ Anulează", command=self.undo_operation)
         self.btn_undo.pack(pady=5, padx=10, fill="x")
 
         self.btn_reset = ctk.CTkButton(self.session_panel, text="🗑 Resetare Sesiune", command=self.reset_session, fg_color="#8B0000", hover_color="#5A0000")
