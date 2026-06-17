@@ -298,13 +298,26 @@ class MorphoApp(ctk.CTk):
             self.on_slice_slider_move(count // 2)
 
     def gui_load_image(self):
-        self.reset_session()  # Resetăm stiva de operații și interfața
         p = filedialog.askopenfilename()
+        
         if p and self.backend.load_image(p):
+            
             self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+            
+            self.reset_session() 
+            
+            if hasattr(self.backend, 'processed_image'):
+                self.backend.processed_image = None
+                
+            try:
+                self.lbl_proc_img.configure(image="", text="Așteptare prelucrare...")
+            except Exception:
+                self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
+                
+            self.status_bar.configure(text="Stare: Imagine nouă încărcată. Așteptare prelucrare.")
+            
         elif p:
             self.show_custom_message("Eroare Încărcare", "Nu s-a putut citi fișierul selectat.", "error")
-
     def gui_save_image(self):
         p = filedialog.asksaveasfilename(defaultextension=".png")
         if p: 
