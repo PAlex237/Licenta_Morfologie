@@ -227,6 +227,7 @@ class MorphoBackend:
                     temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_TOPHAT, kernel)
                 elif nume_filtru == "Black-Hat":
                     temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, kernel)
-
+                elif nume_filtru == "Gradient":
+                    temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_GRADIENT, kernel)
         # La final, salvăm rezultatul cumulat în cache-ul folosit de UI pentru afișare
         self.batch_cache = temp_data

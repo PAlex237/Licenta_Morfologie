@@ -55,17 +55,31 @@ class MorphoApp(ctk.CTk):
         self.btn_save_batch.pack(pady=(25, 10), fill="x", padx=10)
 
         # SETARI GLOBALE
-        ctk.CTkLabel(self.sidebar_frame, text="Setări Processare:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(row=2, column=0, padx=20, pady=(25, 10), sticky="w")
+        ctk.CTkLabel(self.sidebar_frame, text="Setări Procesare:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(row=2, column=0, padx=20, pady=(25, 10), sticky="w")
         
-        self.operator_var = ctk.StringVar(value="Deschidere")
-        ctk.CTkOptionMenu(self.sidebar_frame, variable=self.operator_var, values=["Eroziune", "Dilatare", "Deschidere", "Închidere", "Top-Hat", "Black-Hat"], height=35).grid(row=3, column=0, padx=20, pady=5, sticky="ew")
+        # 1. Meniul pentru Obiective Clinice
+        self.operator_dropdown = ctk.CTkOptionMenu(
+            self.sidebar_frame, 
+            values=[
+                "Filtrare Zgomot de Fond", 
+                "Solidificare Structuri", 
+                "Evidențiere Micro-leziuni", 
+                "Conturare Tumorală", 
+                "Amplificare Regiuni Întunecate"
+            ], 
+            height=35
+        )
+        self.operator_dropdown.grid(row=3, column=0, padx=20, pady=5, sticky="ew")
 
-        self.slider_label = ctk.CTkLabel(self.sidebar_frame, text="Dimensiune Kernel (3x3):", anchor="w")
-        self.slider_label.grid(row=4, column=0, padx=20, pady=(20, 5), sticky="w")
-        self.kernel_slider = ctk.CTkSlider(self.sidebar_frame, from_=3, to=15, number_of_steps=6, command=self.update_slider_label)
-        self.kernel_slider.set(3)
-        self.kernel_slider.grid(row=5, column=0, padx=20, pady=5, sticky="ew")
+        # 2. Meniul pentru Intensitate 
+        self.intensity_dropdown = ctk.CTkOptionMenu(
+            self.sidebar_frame,
+            values=["Fină", "Medie", "Puternică"],
+            height=35
+        )
+        self.intensity_dropdown.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
 
+        # Butonul de execuție
         self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="EXECUȚIE OPERATOR", height=45, font=ctk.CTkFont(size=14, weight="bold"), command=self.gui_apply_processing)
         self.btn_apply.grid(row=6, column=0, padx=20, pady=35, sticky="ew")
 
@@ -311,41 +325,67 @@ class MorphoApp(ctk.CTk):
                 self.show_custom_message("Eroare Critică", f"Nu s-a putut converti volumul NIfTI:\n{info}", "error")
 
     def gui_apply_processing(self):
-        op = self.operator_var.get()
-        ks = int(self.kernel_slider.get())
-        if self.tabview.get() == "Pipeline Medical":
-            if not self.active_batch_folder: 
-                self.show_custom_message("Avertisment", "Vă rugăm să încărcați un set de date existent sau să convertiți un volum .nii mai întâi.", "error")
-                return
-            
-            self.status_bar.configure(text=f"Stare: Se procesează {op} ({ks}x{ks}) în memoria RAM... Așteptați.")
-            self.update_idletasks()
-            
-            suc, count = self.backend.batch_process_to_memory(self.active_batch_folder, op, ks)
-            if suc:
-                self.status_bar.configure(text=f"Stare: Pipeline finalizat cu succes. Navigare activă.")
-                self.btn_save_batch.configure(state="normal") 
-                self.on_slice_slider_move(self.slice_slider.get()) 
-        else:
-            if self.backend.apply_operator(op, ks):
-                self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
-                self.status_bar.configure(text=f"Stare: Filtru aplicat pe imaginea curentă.")
-            else:
-                self.show_custom_message("Avertisment", "Încărcați o imagine binară/grayscale înainte de a aplica operatorul.", "error")
-        # 1. Adăugăm comanda în Backend (în stivă)
-        # Stocăm ca dicționar ca să avem datele frumos structurate
-        noua_operatie = {
-            "nume": op, 
-            "kernel": ks
-        }
-        self.backend.operation_stack.append(noua_operatie)
+            # 1. Preluăm alegerile clinice din interfață (noile meniuri)
+            val_obiectiv = self.operator_dropdown.get()
+            val_intensitate = self.intensity_dropdown.get()
 
-        # 2. Re-randăm lista vizuală ca să apară pe ecran!
-        self.render_session_timeline()
-        
-        # 3. Cerem backend-ului să recalculeze imaginea RMN cu noul stack și o afișăm
-        self.backend.recalculate_pipeline()
-        self.on_slice_slider_move(self.slice_slider.get())
+            # 2. Traducem termenii clinici în parametri tehnici (OpenCV)
+            harta_operatori = {
+                "Filtrare Zgomot de Fond": "Deschidere",
+                "Solidificare Structuri": "Închidere",
+                "Evidențiere Micro-leziuni": "Top-Hat",
+                "Conturare Tumorală": "Gradient",
+                "Amplificare Regiuni Întunecate": "Black-Hat"
+            }
+            
+            harta_intensitate = {
+                "Fină": 3,
+                "Medie": 5,
+                "Puternică": 7
+            }
+
+            # Extragem variabilele tehnice pe care le folosea codul tău vechi
+            op = harta_operatori.get(val_obiectiv, "Deschidere")
+            ks = harta_intensitate.get(val_intensitate, 3)
+            
+            # --- LOGICA TA ORIGINALĂ BAZATĂ PE TAB-URI ---
+            if self.tabview.get() == "Pipeline Medical":
+                if not self.active_batch_folder: 
+                    self.show_custom_message("Avertisment", "Vă rugăm să încărcați un set de date existent sau să convertiți un volum .nii mai întâi.", "error")
+                    return
+                
+                # Actualizăm mesajul din status bar să afișeze termeni medicali
+                self.status_bar.configure(text=f"Stare: Se procesează {val_obiectiv} ({val_intensitate}) în memoria RAM... Așteptați.")
+                self.update_idletasks()
+                
+                suc, count = self.backend.batch_process_to_memory(self.active_batch_folder, op, ks)
+                if suc:
+                    self.status_bar.configure(text=f"Stare: Pipeline finalizat cu succes. Navigare activă.")
+                    self.btn_save_batch.configure(state="normal") 
+                    self.on_slice_slider_move(self.slice_slider.get()) 
+            else:
+                if self.backend.apply_operator(op, ks):
+                    self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
+                    self.status_bar.configure(text=f"Stare: Filtru aplicat pe imaginea curentă.")
+                else:
+                    self.show_custom_message("Avertisment", "Încărcați o imagine binară/grayscale înainte de a aplica operatorul.", "error")
+                    
+            # --- SISTEMUL DE SESIUNE (ISTORIC) ---
+            # 1. Adăugăm comanda în Backend (în stivă), reținând inclusiv denumirile clinice pentru afișaj
+            noua_operatie = {
+                "nume_clinic": val_obiectiv,
+                "intensitate_text": val_intensitate,
+                "nume": op, 
+                "kernel": ks
+            }
+            self.backend.operation_stack.append(noua_operatie)
+
+            # 2. Re-randăm lista vizuală ca să apară pe ecran!
+            self.render_session_timeline()
+            
+            # 3. Cerem backend-ului să recalculeze imaginea RMN cu noul stack și o afișăm
+            self.backend.recalculate_pipeline()
+            self.on_slice_slider_move(self.slice_slider.get())
     def gui_save_batch(self):
         op = self.operator_var.get()
         ks = int(self.kernel_slider.get())
@@ -391,37 +431,38 @@ class MorphoApp(ctk.CTk):
 
 
     def render_session_timeline(self):
-        # Curățăm panoul înainte de fiecare redesenare
-        for widget in self.session_scrollable_frame.winfo_children():
-            widget.destroy()
+            # Curățăm panoul înainte de fiecare redesenare
+            for widget in self.session_scrollable_frame.winfo_children():
+                widget.destroy()
 
-        # Parcurgem stiva de operații din backend
-        for index, op in enumerate(self.backend.operation_stack):
-            
-            # Creăm rândul pentru o operație
-            row_frame = ctk.CTkFrame(self.session_scrollable_frame, height=35)
-            row_frame.pack(fill="x", padx=5, pady=2)
-            row_frame.pack_propagate(False) # Păstrăm înălțimea fixă
-            
-            # 1. Mânerul pentru Drag & Drop (simbolul ☰)
-            drag_handle = ctk.CTkLabel(row_frame, text="☰", cursor="hand2", width=20)
-            drag_handle.pack(side="left", padx=5)
-            
-            # Evenimentele pentru Drag & Drop pe mâner
-            drag_handle.bind("<ButtonPress-1>", lambda e, idx=index: self.on_drag_start(e, idx))
-            drag_handle.bind("<ButtonRelease-1>", lambda e, idx=index: self.on_drag_release(e, idx))
-            
-            # 2. Textul operației
-            op_label = ctk.CTkLabel(row_frame, text=f"{op['nume']} ({op['kernel']}x{op['kernel']})")
-            op_label.pack(side="left", padx=10)
-            
-            # 3. Butonul "X" pentru ștergere specifică
-            btn_delete = ctk.CTkButton(row_frame, text="❌", width=30, fg_color="transparent", 
-                                    hover_color="#8B0000", text_color="red",
-                                    command=lambda idx=index: self.delete_operation_ui(idx))
-            btn_delete.pack(side="right", padx=5)
-
-
+            # Parcurgem stiva de operații din backend
+            for index, op in enumerate(self.backend.operation_stack):
+                
+                # Creăm rândul pentru o operație
+                row_frame = ctk.CTkFrame(self.session_scrollable_frame, height=35)
+                row_frame.pack(fill="x", padx=5, pady=2)
+                row_frame.pack_propagate(False) # Păstrăm înălțimea fixă
+                
+                # 1. Mânerul pentru Drag & Drop (simbolul ☰)
+                drag_handle = ctk.CTkLabel(row_frame, text="☰", cursor="hand2", width=20)
+                drag_handle.pack(side="left", padx=5)
+                
+                # Evenimentele pentru Drag & Drop pe mâner
+                drag_handle.bind("<ButtonPress-1>", lambda e, idx=index: self.on_drag_start(e, idx))
+                drag_handle.bind("<ButtonRelease-1>", lambda e, idx=index: self.on_drag_release(e, idx))
+                
+                # 2. Textul operației (Actualizat pentru afișarea termenilor medicali)
+                nume_afisat = op.get("nume_clinic", op["nume"])
+                intensitate_afisata = op.get("intensitate_text", f"{op['kernel']}x{op['kernel']}")
+                
+                op_label = ctk.CTkLabel(row_frame, text=f"{nume_afisat} ({intensitate_afisata})")
+                op_label.pack(side="left", padx=10)
+                
+                # 3. Butonul "X" pentru ștergere specifică
+                btn_delete = ctk.CTkButton(row_frame, text="❌", width=30, fg_color="transparent", 
+                                        hover_color="#8B0000", text_color="red",
+                                        command=lambda idx=index: self.delete_operation_ui(idx))
+                btn_delete.pack(side="right", padx=5)
     # --- Logica de Drag & Drop ---
 
     def on_drag_start(self, event, index):
