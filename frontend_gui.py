@@ -23,7 +23,8 @@ class MorphoApp(ctk.CTk):
         self.active_batch_folder = None
         self.processed_batch_folder = None
         self.slice_files_list = [] 
-
+        self.base_data={}
+        self.operator_var = []
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -68,6 +69,27 @@ class MorphoApp(ctk.CTk):
         self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="EXECUȚIE OPERATOR", height=45, font=ctk.CTkFont(size=14, weight="bold"), command=self.gui_apply_processing)
         self.btn_apply.grid(row=6, column=0, padx=20, pady=35, sticky="ew")
 
+        # --- PANOUL DE SESIUNE (ISTORIC) ---
+        # Creăm un cadru dedicat pentru istoric, pe care îl punem în interfață (ex: în partea dreaptă)
+        self.session_panel = ctk.CTkFrame(self.sidebar_frame) # Înlocuiește self.main_window cu părintele corect din codul tău
+        self.session_panel.grid(row=15, column=0, sticky="nsew", padx=10, pady=10)
+
+        self.sidebar_frame.grid_rowconfigure(15, weight=1) 
+
+                # Titlul panoului
+        self.session_title = ctk.CTkLabel(self.session_panel, text="Istoric Sesiune", font=("Arial", 16, "bold"))
+        self.session_title.pack(pady=10)
+
+        # Zona scrollabilă (AICI vor apărea operațiile)
+        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=250, height=400)
+        self.session_scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Butoane de control global al sesiunii
+        self.btn_undo = ctk.CTkButton(self.session_panel, text="↩ Undo (Anulează ultimul)", command=self.undo_operation)
+        self.btn_undo.pack(pady=5, padx=10, fill="x")
+
+        self.btn_reset = ctk.CTkButton(self.session_panel, text="🗑 Resetare Sesiune", command=self.reset_session, fg_color="#8B0000", hover_color="#5A0000")
+        self.btn_reset.pack(pady=5, padx=10, fill="x")
     def _build_main_area(self):
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.grid(row=0, column=1, sticky="nsew")
@@ -183,14 +205,24 @@ class MorphoApp(ctk.CTk):
         
         orig_path = os.path.join(self.active_batch_folder, file_name)
         self.backend.load_image(orig_path)
-        self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+        
+        # Display the original image
+        if self.backend.get_original_image() is not None:
+            self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
         
         if hasattr(self.backend, 'batch_cache') and file_name in self.backend.batch_cache:
-            img_proc = self.backend.batch_cache[file_name]
-            self.display_image(img_proc, self.lbl_proc_img)
+            self.display_image(self.backend.batch_cache[file_name], self.lbl_proc_img)
         else:
-            self.lbl_proc_img.configure(image=None, text="Apasă 'PREVIZUALIZEAZĂ LOT' pentru rezultat.")
-            self.lbl_proc_img.image = None
+            from PIL import Image
+            import customtkinter as ctk
+            
+            # Creăm o imagine transparentă de 1x1 pixel (invizibilă)
+            blank_pil = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
+            blank_img = ctk.CTkImage(light_image=blank_pil, size=(1, 1))
+            
+            # O punem pe ecran în loc de 'None'
+            self.lbl_proc_img.configure(image=blank_img, text="Apasă 'PREVIZUALIZEAZĂ LOT' pentru rezultat.")
+            self.lbl_proc_img.image = blank_img
 
     def on_tab_change(self):
         tab = self.tabview.get()
@@ -209,6 +241,15 @@ class MorphoApp(ctk.CTk):
             self.slice_slider.set(count // 2)
             self.nav_frame.grid()
             self.btn_save_batch.configure(state="disabled") 
+            
+            # Load all original images into base_data
+            self.backend.base_data = {}
+            for file_name in self.slice_files_list:
+                img_path = os.path.join(folder_path, file_name)
+                img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    self.backend.base_data[file_name] = img
+            
             if hasattr(self.backend, 'batch_cache'):
                 self.backend.batch_cache.clear() 
             self.on_slice_slider_move(count // 2)
@@ -284,7 +325,20 @@ class MorphoApp(ctk.CTk):
                 self.status_bar.configure(text=f"Stare: Filtru aplicat pe imaginea curentă.")
             else:
                 self.show_custom_message("Avertisment", "Încărcați o imagine binară/grayscale înainte de a aplica operatorul.", "error")
+        # 1. Adăugăm comanda în Backend (în stivă)
+        # Stocăm ca dicționar ca să avem datele frumos structurate
+        noua_operatie = {
+            "nume": op, 
+            "kernel": ks
+        }
+        self.backend.operation_stack.append(noua_operatie)
 
+        # 2. Re-randăm lista vizuală ca să apară pe ecran!
+        self.render_session_timeline()
+        
+        # 3. Cerem backend-ului să recalculeze imaginea RMN cu noul stack și o afișăm
+        self.backend.recalculate_pipeline()
+        self.on_slice_slider_move(self.slice_slider.get())
     def gui_save_batch(self):
         op = self.operator_var.get()
         ks = int(self.kernel_slider.get())
@@ -305,11 +359,107 @@ class MorphoApp(ctk.CTk):
         self.slider_label.configure(text=f"Dimensiune Kernel ({val}x{val}):")
 
     def display_image(self, cv_img, lbl):
-        rgb = cv2.cvtColor(cv_img, cv2.COLOR_GRAY2RGB) if len(cv_img.shape)==2 else cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+        if cv_img is None:
+            return
+        
+        import cv2
+        from PIL import Image
+        import customtkinter as ctk
+        
+        # Logica ta impecabilă de dinainte care făcea conversia din matrice în RGB
+        rgb = cv2.cvtColor(cv_img, cv2.COLOR_GRAY2RGB) if len(cv_img.shape) == 2 else cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
         img = ctk.CTkImage(Image.fromarray(rgb), size=(500, 500))
+        
         lbl.configure(image=img, text="")
         lbl.image = img
 
-if __name__ == "__main__":
-    app = MorphoApp()
-    app.mainloop()
+    def update_image_display(self):
+        """Update the displayed images (for use when stack is modified)."""
+        if self.tabview.get() == "Pipeline Medical" and self.active_batch_folder:
+            self.on_slice_slider_move(self.slice_slider.get())
+        elif self.backend.get_original_image() is not None:
+            self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+            if self.backend.get_processed_image() is not None:
+                self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
+
+
+    def render_session_timeline(self):
+        # Curățăm panoul înainte de fiecare redesenare
+        for widget in self.session_scrollable_frame.winfo_children():
+            widget.destroy()
+
+        # Parcurgem stiva de operații din backend
+        for index, op in enumerate(self.backend.operation_stack):
+            
+            # Creăm rândul pentru o operație
+            row_frame = ctk.CTkFrame(self.session_scrollable_frame, height=35)
+            row_frame.pack(fill="x", padx=5, pady=2)
+            row_frame.pack_propagate(False) # Păstrăm înălțimea fixă
+            
+            # 1. Mânerul pentru Drag & Drop (simbolul ☰)
+            drag_handle = ctk.CTkLabel(row_frame, text="☰", cursor="hand2", width=20)
+            drag_handle.pack(side="left", padx=5)
+            
+            # Evenimentele pentru Drag & Drop pe mâner
+            drag_handle.bind("<ButtonPress-1>", lambda e, idx=index: self.on_drag_start(e, idx))
+            drag_handle.bind("<ButtonRelease-1>", lambda e, idx=index: self.on_drag_release(e, idx))
+            
+            # 2. Textul operației
+            op_label = ctk.CTkLabel(row_frame, text=f"{op['nume']} ({op['kernel']}x{op['kernel']})")
+            op_label.pack(side="left", padx=10)
+            
+            # 3. Butonul "X" pentru ștergere specifică
+            btn_delete = ctk.CTkButton(row_frame, text="❌", width=30, fg_color="transparent", 
+                                    hover_color="#8B0000", text_color="red",
+                                    command=lambda idx=index: self.delete_operation_ui(idx))
+            btn_delete.pack(side="right", padx=5)
+
+
+    # --- Logica de Drag & Drop ---
+
+    def on_drag_start(self, event, index):
+        # Salvăm coordonata Y de unde începe tragerea
+        self.drag_start_y = event.y_root
+        self.drag_start_index = index
+
+    def on_drag_release(self, event, start_index):
+        # Calculăm diferența de pixeli (cât de mult am tras cu mouse-ul în jos sau în sus)
+        delta_y = event.y_root - self.drag_start_y
+        
+        # Presupunem că un rând are aprox. 40 pixeli înălțime (35 inaltime + 5 padding)
+        row_height = 40 
+        
+        # Calculăm cu câte poziții s-a mutat (pozitiv = în jos, negativ = în sus)
+        shift_amount = round(delta_y / row_height)
+        
+        if shift_amount != 0:
+            new_index = start_index + shift_amount
+            
+            # Trimitem comanda la Backend
+            self.backend.move_operation(start_index, new_index)
+            
+            # Redesenăm interfața și actualizăm imaginea principală
+            self.render_session_timeline()
+            self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
+
+    # --- Logica de Ștergere Specifică ---
+
+    def delete_operation_ui(self, index):
+        self.backend.remove_operation(index)
+        self.render_session_timeline()
+        self.on_slice_slider_move(self.slice_slider.get())  # Actualizăm imaginea curentă după ștergere
+
+    def undo_operation(self):
+        if len(self.backend.operation_stack) > 0:
+            self.backend.operation_stack.pop() # Scoatem ultimul element
+            self.backend.recalculate_pipeline()
+            self.render_session_timeline()
+            self.update_image_display()
+            self.on_slice_slider_move(self.slice_slider.get())
+
+    def reset_session(self):
+        self.backend.operation_stack.clear() # Curățăm tot istoricul
+        self.backend.recalculate_pipeline()
+        self.render_session_timeline()
+        self.update_image_display()
+        self.on_slice_slider_move(self.slice_slider.get())
