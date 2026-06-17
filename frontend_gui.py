@@ -25,15 +25,19 @@ class MorphoApp(ctk.CTk):
         self.slice_files_list = [] 
         self.base_data={}
         self.operator_var = []
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=0)  # sidebar fixed width
+        self.grid_columnconfigure(1, weight=1)  # main image expands
+        self.grid_columnconfigure(2, weight=0)  # history fixed width
         self.grid_rowconfigure(0, weight=1)
 
         self._build_sidebar()
         self._build_main_area()
 
     def _build_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=280, corner_radius=0)
-        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0)
+        self.sidebar_frame.grid(row=0, column=0, rowspan=10, sticky="nsew")
+        self.sidebar_frame.grid_propagate(False)  # păstrează lățimea fixă a sidebar-ului
+        self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(self.sidebar_frame, text="Meniu Principal", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, padx=20, pady=(25, 15))
 
@@ -85,27 +89,28 @@ class MorphoApp(ctk.CTk):
 
         # --- PANOUL DE SESIUNE (ISTORIC) ---
         # Creăm un cadru dedicat pentru istoric, pe care îl punem în interfață (ex: în partea dreaptă)
-        self.session_panel = ctk.CTkFrame(self)
-        self.session_panel.grid(row=0, column=2, sticky="nsew", padx=(0, 10), pady=10)
-
-        self.sidebar_frame.grid_rowconfigure(15, weight=1) 
+        self.session_panel = ctk.CTkFrame(self, width=310, corner_radius=10)
+        self.session_panel.grid(row=0, column=2, rowspan=10, sticky="nsew", padx=(0, 10), pady=10)
+        self.session_panel.grid_propagate(False)
+        self.session_panel.grid_columnconfigure(0, weight=1)
 
         self.session_title = ctk.CTkLabel(self.session_panel, text="Istoric Sesiune", font=("Arial", 16, "bold"))
-        self.session_title.pack(pady=10)
+        self.session_title.grid(row=0, column=0, sticky="ew", pady=(10, 5), padx=10)
 
         # Zona scrollabilă (AICI vor apărea operațiile)
-        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=200, height=600)
-        self.session_scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.session_panel.grid_rowconfigure(1, weight=1)
+        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=290)
+        self.session_scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 5))
 
         # Butoane de control global al sesiunii
         self.btn_undo = ctk.CTkButton(self.session_panel, text="↩ Anulează", command=self.undo_operation)
-        self.btn_undo.pack(pady=5, padx=10, fill="x")
+        self.btn_undo.grid(row=2, column=0, pady=(5, 3), padx=10, sticky="ew")
 
         self.btn_reset = ctk.CTkButton(self.session_panel, text="🗑 Resetare Sesiune", command=self.reset_session, fg_color="#8B0000", hover_color="#5A0000")
-        self.btn_reset.pack(pady=5, padx=10, fill="x")
+        self.btn_reset.grid(row=3, column=0, pady=(0, 10), padx=10, sticky="ew")
     def _build_main_area(self):
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_frame.grid(row=0, column=1, sticky="nsew")
+        self.main_frame.grid(row=0, column=1, rowspan=10, sticky="nsew")
         self.main_frame.grid_columnconfigure((0, 1), weight=1)
         self.main_frame.grid_rowconfigure(0, weight=1)
 
@@ -415,7 +420,7 @@ class MorphoApp(ctk.CTk):
         
         # Logica ta impecabilă de dinainte care făcea conversia din matrice în RGB
         rgb = cv2.cvtColor(cv_img, cv2.COLOR_GRAY2RGB) if len(cv_img.shape) == 2 else cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-        img = ctk.CTkImage(Image.fromarray(rgb), size=(500, 500))
+        img = ctk.CTkImage(Image.fromarray(rgb), size=(700, 700))
         
         lbl.configure(image=img, text="")
         lbl.image = img
@@ -439,8 +444,8 @@ class MorphoApp(ctk.CTk):
             for index, op in enumerate(self.backend.operation_stack):
                 
                 # Creăm rândul pentru o operație
-                row_frame = ctk.CTkFrame(self.session_scrollable_frame, height=35)
-                row_frame.pack(fill="x", padx=5, pady=2)
+                row_frame = ctk.CTkFrame(self.session_scrollable_frame, height=60)
+                row_frame.pack(fill="x", padx=5, pady=4)
                 row_frame.pack_propagate(False) # Păstrăm înălțimea fixă
                 
                 # 1. Mânerul pentru Drag & Drop (simbolul ☰)
@@ -451,18 +456,19 @@ class MorphoApp(ctk.CTk):
                 drag_handle.bind("<ButtonPress-1>", lambda e, idx=index: self.on_drag_start(e, idx))
                 drag_handle.bind("<ButtonRelease-1>", lambda e, idx=index: self.on_drag_release(e, idx))
                 
-                # 2. Textul operației (Actualizat pentru afișarea termenilor medicali)
+                # 2. Textul operației pe două rânduri, cu detaliu de intensitate
                 nume_afisat = op.get("nume_clinic", op["nume"])
                 intensitate_afisata = op.get("intensitate_text", f"{op['kernel']}x{op['kernel']}")
+                text_clar = f"{nume_afisat}\n↳ Intensitate: {intensitate_afisata}"
                 
-                op_label = ctk.CTkLabel(row_frame, text=f"{nume_afisat} ({intensitate_afisata})")
-                op_label.pack(side="left", padx=10)
+                op_label = ctk.CTkLabel(row_frame, text=text_clar, justify="left", font=("Arial", 12), wraplength=190, anchor="w")
+                op_label.pack(side="left", padx=(10, 5), fill="x", expand=True)
                 
                 # 3. Butonul "X" pentru ștergere specifică
-                btn_delete = ctk.CTkButton(row_frame, text="❌", width=30, fg_color="transparent", 
-                                        hover_color="#8B0000", text_color="red",
+                btn_delete = ctk.CTkButton(row_frame, text="❌", width=32, height=32, fg_color="#581a1a", 
+                                        hover_color="#8B0000", text_color="white", border_width=1, border_color="#8B0000",
                                         command=lambda idx=index: self.delete_operation_ui(idx))
-                btn_delete.pack(side="right", padx=5)
+                btn_delete.pack(side="right", padx=5, pady=8)
     # --- Logica de Drag & Drop ---
 
     def on_drag_start(self, event, index):
