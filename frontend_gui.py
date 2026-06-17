@@ -131,9 +131,9 @@ class MorphoApp(ctk.CTk):
     def _build_main_area(self):
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.grid(row=0, column=1, rowspan=10, sticky="nsew")
-        self.main_frame.grid_columnconfigure((0, 1), weight=1)
+        self.main_frame.grid_columnconfigure((0, 1), weight=1, uniform="equal")
         self.main_frame.grid_rowconfigure(0, weight=1)
-
+        
         frame_orig = ctk.CTkFrame(self.main_frame, corner_radius=10)
         frame_orig.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
         ctk.CTkLabel(frame_orig, text="Imagine Originală / Sursă", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
