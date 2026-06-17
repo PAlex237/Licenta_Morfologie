@@ -298,6 +298,7 @@ class MorphoApp(ctk.CTk):
             self.on_slice_slider_move(count // 2)
 
     def gui_load_image(self):
+        self.reset_session()  # Resetăm stiva de operații și interfața
         p = filedialog.askopenfilename()
         if p and self.backend.load_image(p):
             self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
