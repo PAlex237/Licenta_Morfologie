@@ -369,67 +369,68 @@ class MorphoApp(ctk.CTk):
                 self.show_custom_message("Eroare Critică", f"Nu s-a putut converti volumul NIfTI:\n{info}", "error")
 
     def gui_apply_processing(self):
-            # 1. Preluăm alegerile clinice din interfață (noile meniuri)
-            val_obiectiv = self.operator_dropdown.get()
-            val_intensitate = self.intensity_dropdown.get()
+        # 1. Preluăm alegerile clinice din interfață
+        val_obiectiv = self.operator_dropdown.get()
+        val_intensitate = self.intensity_dropdown.get()
 
-            # 2. Traducem termenii clinici în parametri tehnici (OpenCV)
-            harta_operatori = {
-                "Filtrare Zgomot de Fond": "Deschidere",
-                "Solidificare Structuri": "Închidere",
-                "Evidențiere Micro-leziuni": "Top-Hat",
-                "Conturare Tumorală": "Gradient",
-                "Amplificare Regiuni Întunecate": "Black-Hat"
-            }
-            
-            harta_intensitate = {
-                "Fină": 3,
-                "Medie": 5,
-                "Puternică": 7
-            }
+        # 2. Traducem termenii clinici în parametri tehnici
+        harta_operatori = {
+            "Filtrare Zgomot de Fond": "Deschidere",
+            "Solidificare Structuri": "Închidere",
+            "Evidențiere Micro-leziuni": "Top-Hat",
+            "Conturare Tumorală": "Gradient",
+            "Amplificare Regiuni Întunecate": "Black-Hat"
+        }
+        harta_intensitate = {
+            "Fină": 3,
+            "Medie": 5,
+            "Puternică": 7
+        }
 
-            # Extragem variabilele tehnice pe care le folosea codul tău vechi
-            op = harta_operatori.get(val_obiectiv, "Deschidere")
-            ks = harta_intensitate.get(val_intensitate, 3)
+        op = harta_operatori.get(val_obiectiv, "Deschidere")
+        ks = harta_intensitate.get(val_intensitate, 3)
+
+        # --- NOUA LOGICĂ UNIFICATĂ ---
+        
+        # PASUL A: Adăugăm direct în stiva backend-ului
+        noua_operatie = {
+            "nume_clinic": val_obiectiv,
+            "intensitate_text": val_intensitate,
+            "nume": op, 
+            "kernel": ks
+        }
+        self.backend.operation_stack.append(noua_operatie)
+
+        # PASUL B: Actualizăm lista vizuală (Timeline-ul din dreapta)
+        self.render_session_timeline()
+        
+        # PASUL C: Cerem backend-ului să recalculeze TOT (inclusiv noul operator adăugat)
+        self.backend.recalculate_pipeline()
+
+        # PASUL D: Afișăm rezultatul corect în funcție de tab-ul activ
+        if self.tabview.get() == "Pipeline Medical":
+            if not getattr(self, 'active_batch_folder', None): 
+                self.show_custom_message("Avertisment", "Încărcați un set de date mai întâi.", "error")
+                self.backend.operation_stack.pop() # Anulăm adăugarea dacă nu există date
+                self.render_session_timeline()
+                return
             
-            # --- LOGICA TA ORIGINALĂ BAZATĂ PE TAB-URI ---
-            if self.tabview.get() == "Pipeline Medical":
-                if not self.active_batch_folder: 
-                    self.show_custom_message("Avertisment", "Vă rugăm să încărcați un set de date existent sau să convertiți un volum .nii mai întâi.", "error")
-                    return
-                
-                # Actualizăm mesajul din status bar să afișeze termeni medicali
-                self.status_bar.configure(text=f"Stare: Se procesează {val_obiectiv} ({val_intensitate}) în memoria RAM... Așteptați.")
-                self.update_idletasks()
-                
-                suc, count = self.backend.batch_process_to_memory(self.active_batch_folder, op, ks)
-                if suc:
-                    self.status_bar.configure(text=f"Stare: Pipeline finalizat cu succes. Navigare activă.")
-                    self.btn_save_batch.configure(state="normal") 
-                    self.on_slice_slider_move(self.slice_slider.get()) 
+            self.status_bar.configure(text=f"Stare: Pipeline actualizat cu {val_obiectiv}.")
+            self.btn_save_batch.configure(state="normal") 
+            self.on_slice_slider_move(self.slice_slider.get()) 
+            
+        else:
+            # Modul Single Image
+            img = self.backend.get_processed_image()
+            if img is not None:
+                self.display_image(img, self.lbl_proc_img)
+                self.status_bar.configure(text=f"Stare: Filtru aplicat pe imaginea curentă.")
             else:
-                if self.backend.apply_operator(op, ks):
-                    self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
-                    self.status_bar.configure(text=f"Stare: Filtru aplicat pe imaginea curentă.")
-                else:
-                    self.show_custom_message("Avertisment", "Încărcați o imagine binară/grayscale înainte de a aplica operatorul.", "error")
-                    
-            # --- SISTEMUL DE SESIUNE (ISTORIC) ---
-            # 1. Adăugăm comanda în Backend (în stivă), reținând inclusiv denumirile clinice pentru afișaj
-            noua_operatie = {
-                "nume_clinic": val_obiectiv,
-                "intensitate_text": val_intensitate,
-                "nume": op, 
-                "kernel": ks
-            }
-            self.backend.operation_stack.append(noua_operatie)
-
-            # 2. Re-randăm lista vizuală ca să apară pe ecran!
-            self.render_session_timeline()
-            
-            # 3. Cerem backend-ului să recalculeze imaginea RMN cu noul stack și o afișăm
-            self.backend.recalculate_pipeline()
-            self.on_slice_slider_move(self.slice_slider.get())
+                self.show_custom_message("Avertisment", "Încărcați o imagine înainte de procesare.", "error")
+                self.backend.operation_stack.pop() # Anulăm adăugarea dacă nu există imagine
+                self.render_session_timeline()
+            # 1. Preluăm alegerile clinice din interfață (noile meniuri)
+      
     def gui_save_batch(self):
         op = self.operator_var.get()
         ks = int(self.kernel_slider.get())
