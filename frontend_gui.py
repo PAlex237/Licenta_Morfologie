@@ -32,15 +32,40 @@ class MorphoApp(ctk.CTk):
 
         self._build_sidebar()
         self._build_main_area()
+        
+        # --- PENTRU PANOUL DIN STÂNGA ---
+        # 1. Butonul mic (afișat doar când panoul e ascuns)
+        self.btn_show_left = ctk.CTkButton(self, text="▶", width=30, height=40, font=("Arial", 16, "bold"), command=self.show_left_panel)
+        
+        # 2. Butonul de ascundere al sidebar-ului va fi creat în header-ul sidebar-ului
+        self.btn_hide_left = ctk.CTkButton(self.sidebar_frame, text="◀", fg_color="transparent", border_width=1, width=30, height=30, command=self.hide_left_panel)
+
+        # --- PENTRU PANOUL DIN DREAPTA ---
+        # 1. Butonul mic (afișat doar când panoul e ascuns)
+        self.btn_show_right = ctk.CTkButton(self, text="◀", width=30, height=40, font=("Arial", 16, "bold"), command=self.show_right_panel)
+        
 
     def _build_sidebar(self):
+        # --- SIDEBAR FRAME ---
         self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, rowspan=10, sticky="nsew")
-        self.sidebar_frame.grid_propagate(False)  # păstrează lățimea fixă a sidebar-ului
+        self.sidebar_frame.grid_propagate(False) 
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self.sidebar_frame, text="Meniu Principal", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, padx=20, pady=(25, 15))
+        # --- HEADER SIDEBAR (Titlu + Buton Ascunde) ---
+        header_frame = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=(25, 15))
+        header_frame.grid_columnconfigure(0, weight=1) # Titlul ia tot spațiul rămas
 
+        ctk.CTkLabel(header_frame, text="Meniu Principal", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, sticky="w")
+        
+        # Butonul de ascundere stânga (aici este eroarea ta - trebuie să fie definit/creat)
+        self.btn_hide_left = ctk.CTkButton(header_frame, text="◀", width=30, height=30, 
+                                           fg_color="transparent", border_width=1, 
+                                           command=self.hide_left_panel)
+        self.btn_hide_left.grid(row=0, column=1, sticky="e", padx=(10, 0))
+
+        # --- RESTUL TAB-URILOR ---
         self.tabview = ctk.CTkTabview(self.sidebar_frame, command=self.on_tab_change)
         self.tabview.grid(row=1, column=0, padx=15, pady=5, sticky="ew")
         self.tabview.add("Single Image")
@@ -54,28 +79,19 @@ class MorphoApp(ctk.CTk):
         ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="Conversie Nouă (.nii)", height=35, fg_color="#1f538d", hover_color="#14395e", command=self.gui_convert_nii).pack(pady=(15, 10), fill="x", padx=10)
         ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="Încarcă Set Existent", height=35, fg_color="#b35900", hover_color="#8c4600", command=self.gui_load_dataset).pack(pady=10, fill="x", padx=10)
         
-        # BUTON SALVARE LOT
         self.btn_save_batch = ctk.CTkButton(self.tabview.tab("Pipeline Medical"), text="SALVEAZĂ LOTUL", height=40, font=ctk.CTkFont(weight="bold"), fg_color="#28a745", hover_color="#218838", state="disabled", command=self.gui_save_batch)
         self.btn_save_batch.pack(pady=(25, 10), fill="x", padx=10)
 
-        # SETARI GLOBALE
+        # --- SETĂRI PROCESARE ---
         ctk.CTkLabel(self.sidebar_frame, text="Setări Procesare:", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(row=2, column=0, padx=20, pady=(25, 10), sticky="w")
         
-        # 1. Meniul pentru Obiective Clinice
         self.operator_dropdown = ctk.CTkOptionMenu(
             self.sidebar_frame, 
-            values=[
-                "Filtrare Zgomot de Fond", 
-                "Solidificare Structuri", 
-                "Evidențiere Micro-leziuni", 
-                "Conturare Tumorală", 
-                "Amplificare Regiuni Întunecate"
-            ], 
+            values=["Filtrare Zgomot de Fond", "Solidificare Structuri", "Evidențiere Micro-leziuni", "Conturare Tumorală", "Amplificare Regiuni Întunecate"], 
             height=35
         )
         self.operator_dropdown.grid(row=3, column=0, padx=20, pady=5, sticky="ew")
 
-        # 2. Meniul pentru Intensitate 
         self.intensity_dropdown = ctk.CTkOptionMenu(
             self.sidebar_frame,
             values=["Fină", "Medie", "Puternică"],
@@ -83,23 +99,30 @@ class MorphoApp(ctk.CTk):
         )
         self.intensity_dropdown.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
 
-        # Butonul de execuție
         self.btn_apply = ctk.CTkButton(self.sidebar_frame, text="EXECUȚIE OPERATOR", height=45, font=ctk.CTkFont(size=14, weight="bold"), command=self.gui_apply_processing)
         self.btn_apply.grid(row=6, column=0, padx=20, pady=35, sticky="ew")
 
         # --- PANOUL DE SESIUNE (ISTORIC) ---
         # Creăm un cadru dedicat pentru istoric, pe care îl punem în interfață (ex: în partea dreaptă)
-        self.session_panel = ctk.CTkFrame(self, width=310, corner_radius=10)
+        self.session_panel = ctk.CTkFrame(self, width=320, corner_radius=10)
         self.session_panel.grid(row=0, column=2, rowspan=10, sticky="nsew", padx=(0, 10), pady=10)
         self.session_panel.grid_propagate(False)
         self.session_panel.grid_columnconfigure(0, weight=1)
 
-        self.session_title = ctk.CTkLabel(self.session_panel, text="Istoric Sesiune", font=("Arial", 16, "bold"))
-        self.session_title.grid(row=0, column=0, sticky="ew", pady=(10, 5), padx=10)
+        # Header frame cu titlu și buton de ascundere
+        header_frame = ctk.CTkFrame(self.session_panel, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(10, 5), padx=10)
+        header_frame.grid_columnconfigure(0, weight=1)
+        
+        self.session_title = ctk.CTkLabel(header_frame, text="Istoric Sesiune", font=("Arial", 16, "bold"))
+        self.session_title.grid(row=0, column=0, sticky="w")
+        
+        self.btn_hide_right = ctk.CTkButton(header_frame, text="▶", fg_color="transparent", border_width=1, width=30, height=30, command=self.hide_right_panel)
+        self.btn_hide_right.grid(row=0, column=1, sticky="e", padx=(10, 0))
 
         # Zona scrollabilă (AICI vor apărea operațiile)
         self.session_panel.grid_rowconfigure(1, weight=1)
-        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=290)
+        self.session_scrollable_frame = ctk.CTkScrollableFrame(self.session_panel, width=300)
         self.session_scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 5))
 
         # Butoane de control global al sesiunii
@@ -311,6 +334,23 @@ class MorphoApp(ctk.CTk):
             self.active_batch_folder = d  
             self._init_slider(d)          
             self.status_bar.configure(text=f"Stare: Set date încărcat '{os.path.basename(d)}'.")
+    def hide_left_panel(self):
+        self.sidebar_frame.grid_remove()  # Ascunde panoul din stânga
+        # Arată butonul mic de deschidere în locul lui
+        self.btn_show_left.grid(row=0, column=0, sticky="w", padx=5, pady=20)
+
+    def show_left_panel(self):
+        self.btn_show_left.grid_remove()  # Ascunde butonul mic
+        self.sidebar_frame.grid()         # Reface panoul complet
+
+    def hide_right_panel(self):
+        self.session_panel.grid_remove()  # Ascunde panoul din dreapta
+        # Arată butonul mic de deschidere în locul lui
+        self.btn_show_right.grid(row=0, column=2, sticky="e", padx=5, pady=20)
+
+    def show_right_panel(self):
+        self.btn_show_right.grid_remove() # Ascunde butonul mic
+        self.session_panel.grid()         # Reface panoul complet
     def gui_convert_nii(self):
         p = filedialog.askopenfilename(filetypes=[("NIfTI", "*.nii *.nii.gz")])
         if not p: return
@@ -517,3 +557,4 @@ class MorphoApp(ctk.CTk):
         self.render_session_timeline()
         self.update_image_display()
         self.on_slice_slider_move(self.slice_slider.get())
+    
