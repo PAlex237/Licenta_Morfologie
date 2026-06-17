@@ -34,17 +34,14 @@ class MorphoApp(ctk.CTk):
         self._build_main_area()
         
         # --- PENTRU PANOUL DIN STÂNGA ---
-        # 1. Butonul mic (afișat doar când panoul e ascuns)
         self.btn_show_left = ctk.CTkButton(self, text="▶", width=30, height=40, font=("Arial", 16, "bold"), command=self.show_left_panel)
         
-        # 2. Butonul de ascundere al sidebar-ului va fi creat în header-ul sidebar-ului
         self.btn_hide_left = ctk.CTkButton(self.sidebar_frame, text="◀", fg_color="transparent", border_width=1, width=30, height=30, command=self.hide_left_panel)
 
         # --- PENTRU PANOUL DIN DREAPTA ---
-        # 1. Butonul mic (afișat doar când panoul e ascuns)
+        
         self.btn_show_right = ctk.CTkButton(self, text="◀", width=30, height=40, font=("Arial", 16, "bold"), command=self.show_right_panel)
         
-
     def _build_sidebar(self):
         # --- SIDEBAR FRAME ---
         self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0)
@@ -137,7 +134,6 @@ class MorphoApp(ctk.CTk):
         self.main_frame.grid_columnconfigure((0, 1), weight=1)
         self.main_frame.grid_rowconfigure(0, weight=1)
 
-        # IMAGINI
         frame_orig = ctk.CTkFrame(self.main_frame, corner_radius=10)
         frame_orig.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
         ctk.CTkLabel(frame_orig, text="Imagine Originală / Sursă", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
@@ -150,7 +146,6 @@ class MorphoApp(ctk.CTk):
         self.lbl_proc_img = ctk.CTkLabel(frame_proc, text="Așteptare prelucrare...", text_color="gray")
         self.lbl_proc_img.pack(expand=True, fill="both", padx=15, pady=15)
 
-        # SLIDER NAVIGARE
         self.nav_frame = ctk.CTkFrame(self.main_frame, height=80, corner_radius=10)
         self.nav_frame.grid(row=1, column=0, columnspan=2, padx=15, pady=(0, 15), sticky="ew")
         
@@ -162,9 +157,13 @@ class MorphoApp(ctk.CTk):
         self.slice_slider.pack(fill="x", padx=30, pady=(5, 15))
         self.nav_frame.grid_remove() 
 
-        self.status_bar = ctk.CTkLabel(self.main_frame, text="Stare: Așteptare date de intrare.", anchor="w", font=ctk.CTkFont(size=13), text_color="#a3a3a3")
-        self.status_bar.grid(row=2, column=0, columnspan=2, padx=20, pady=(0, 10), sticky="ew")
+        self.btn_focus = ctk.CTkButton(self.main_frame, text="⤢ Mod Focus", height=40, width=100, font=ctk.CTkFont(size=14, weight="bold"), 
+                                       fg_color="#1f538d", hover_color="#14395e",
+                                       command=self.toggle_focus_mode)
+        self.btn_focus.grid(row=2, column=0, columnspan=2, padx=100, pady=(0, 15))
 
+        self.status_bar = ctk.CTkLabel(self.main_frame, text="Stare: Așteptare date de intrare.", anchor="w", font=ctk.CTkFont(size=13), text_color="#a3a3a3")
+        self.status_bar.grid(row=3, column=0, columnspan=2, padx=20, pady=(0, 10), sticky="ew")
     def show_custom_message(self, title, message, msg_type="info"):
         """Afișează un popup de informare sau eroare premium, centrat și aliniat cu tema aplicației."""
         dialog = ctk.CTkToplevel(self)
@@ -557,4 +556,19 @@ class MorphoApp(ctk.CTk):
         self.render_session_timeline()
         self.update_image_display()
         self.on_slice_slider_move(self.slice_slider.get())
+
+    def toggle_focus_mode(self):
+        # Verificăm dacă suntem în modul Focus (folosind starea vizibilă a sidebar-ului)
+        is_focus = not self.sidebar_frame.winfo_viewable()
+        
+        if is_focus:
+            # Revenim la modul de editare
+            self.show_left_panel()
+            self.show_right_panel()
+            self.btn_focus.configure(text="⤢ Mod Focus")
+        else:
+            # Trecem în modul Focus
+            self.hide_left_panel()
+            self.hide_right_panel()
+            self.btn_focus.configure(text="⤡ Mod Editare")
     
