@@ -371,12 +371,25 @@ class MorphoApp(ctk.CTk):
         p = filedialog.askopenfilename(filetypes=[("NIfTI", "*.nii *.nii.gz")])
         if not p: return
         name = self.ask_custom_folder_name("Configurare Export NIfTI", "Introduceți un nume pentru setul 2D rezultat:", os.path.basename(p).split('.')[0])
+        
         if name:
             out = os.path.join("datasets", "converted_2d", name)
             self.status_bar.configure(text=f"Stare: Inițializare decodificare volum NIfTI...")
             self.update_idletasks()
+            
             suc, info = self.backend.convert_nii_volume(p, out)
+            
             if suc:
+                self.reset_session() # Curăță interfața și istoricul vizual
+                
+                if hasattr(self.backend, 'batch_cache'):
+                    self.backend.batch_cache = {} # Șterge memoria RAM veche
+                    
+                try:
+                    self.lbl_proc_img.configure(image="", text="Așteptare prelucrare...")
+                except Exception:
+                    self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
+                
                 self.active_batch_folder = out
                 self._init_slider(out)
                 self.status_bar.configure(text=f"Stare: Pipeline finalizat cu succes. Navigare activă.")
@@ -384,7 +397,6 @@ class MorphoApp(ctk.CTk):
             else:
                 self.status_bar.configure(text="Stare: Eroare la conversie.")
                 self.show_custom_message("Eroare Critică", f"Nu s-a putut converti volumul NIfTI:\n{info}", "error")
-
     def gui_apply_processing(self):
         # 1. Preluăm alegerile clinice din interfață
         val_obiectiv = self.operator_dropdown.get()
