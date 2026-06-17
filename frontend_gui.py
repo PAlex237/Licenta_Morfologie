@@ -32,7 +32,7 @@ class MorphoApp(ctk.CTk):
         self._build_main_area()
 
     def _build_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
+        self.sidebar_frame = ctk.CTkFrame(self, width=280, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
 
         ctk.CTkLabel(self.sidebar_frame, text="Meniu Principal", font=ctk.CTkFont(size=22, weight="bold")).grid(row=0, column=0, padx=20, pady=(25, 15))
@@ -280,10 +280,18 @@ class MorphoApp(ctk.CTk):
                 )
                 return
 
+            self.backend.operation_stack.clear()
+            
+            if hasattr(self.backend, 'base_data'):
+                self.backend.base_data = {}
+            if hasattr(self.backend, 'batch_cache'):
+                self.backend.batch_cache = {}
+                
+            self.render_session_timeline()
+
             self.active_batch_folder = d  
             self._init_slider(d)          
             self.status_bar.configure(text=f"Stare: Set date încărcat '{os.path.basename(d)}'.")
-
     def gui_convert_nii(self):
         p = filedialog.askopenfilename(filetypes=[("NIfTI", "*.nii *.nii.gz")])
         if not p: return
