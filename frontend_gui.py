@@ -535,12 +535,44 @@ class MorphoApp(ctk.CTk):
             self.render_session_timeline()
             self.display_image(self.backend.get_processed_image(), self.lbl_proc_img)
 
-    # --- Logica de Ștergere Specifică ---
+    
 
     def delete_operation_ui(self, index):
-        self.backend.remove_operation(index)
+        # Verificăm dacă indexul este valid în cadrul stivei de operații
+        if 0 <= index < len(self.backend.operation_stack):
+            self.backend.operation_stack.pop(index) # Ștergem operația de la indexul respectiv
+            self.backend.recalculate_pipeline()     # Cerem backend-ului să recalculeze fără acea operație
+            self.render_session_timeline()          # Actualizăm lista vizuală din interfață
+            self.update_image_display()
+            
+            if self.tabview.get() == "Pipeline Medical":
+                self.on_slice_slider_move(self.slice_slider.get())
+            else:
+                img = self.backend.get_processed_image()
+                if img is not None:
+                    self.display_image(img, self.lbl_proc_img)
+                    self.status_bar.configure(text="Stare: Operație ștearsă. Imagine recalculată.")
+                else:
+                    self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
+                    self.status_bar.configure(text="Stare: Istoric gol. Se afișează imaginea originală.")
+    
+    def reset_session(self):
+        self.backend.operation_stack.clear() # Curățăm tot istoricul
+        self.backend.recalculate_pipeline()
         self.render_session_timeline()
-        self.on_slice_slider_move(self.slice_slider.get())  # Actualizăm imaginea curentă după ștergere
+        self.update_image_display()
+        
+        # --- NOU: Verificăm în ce mod suntem ---
+        if self.tabview.get() == "Pipeline Medical":
+            self.on_slice_slider_move(self.slice_slider.get())
+        else:
+            # În modul Single Image, pur și simplu forțăm reafișarea imaginii curente (care acum e goală/resetată)
+            # Presupunem că backend-ul returnează imaginea originală dacă stack-ul e gol
+            img = self.backend.get_processed_image() 
+            if img is not None:
+                self.display_image(img, self.lbl_proc_img)
+            else:
+                 self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
 
     def undo_operation(self):
         if len(self.backend.operation_stack) > 0:
@@ -548,14 +580,17 @@ class MorphoApp(ctk.CTk):
             self.backend.recalculate_pipeline()
             self.render_session_timeline()
             self.update_image_display()
-            self.on_slice_slider_move(self.slice_slider.get())
-
-    def reset_session(self):
-        self.backend.operation_stack.clear() # Curățăm tot istoricul
-        self.backend.recalculate_pipeline()
-        self.render_session_timeline()
-        self.update_image_display()
-        self.on_slice_slider_move(self.slice_slider.get())
+            
+            # --- NOU: Verificăm în ce mod suntem ---
+            if self.tabview.get() == "Pipeline Medical":
+                self.on_slice_slider_move(self.slice_slider.get())
+            else:
+                # Actualizăm eticheta cu noua imagine (calculată fără ultimul operator)
+                img = self.backend.get_processed_image()
+                if img is not None:
+                    self.display_image(img, self.lbl_proc_img)
+                else:
+                    self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
 
     def toggle_focus_mode(self):
         # Verificăm dacă suntem în modul Focus (folosind starea vizibilă a sidebar-ului)

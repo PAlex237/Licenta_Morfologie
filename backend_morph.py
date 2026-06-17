@@ -191,43 +191,44 @@ class MorphoBackend:
             self.operation_stack.insert(new_index, op)     
             self.recalculate_pipeline() # Reconstruim instantaneu imaginea RMN
     def recalculate_pipeline(self):
-        """Reaplică în lanț toate operațiile din stivă pe datele brute din RAM."""
-        # Pasul 1: Resetăm datele procesate la starea inițială, brută
-       
+        """Reaplică în lanț toate operațiile din stivă pe datele brute din RAM (Batch + Single Image)."""
         
-        if not self.operation_stack:
-            # Dacă stiva e goală, cache-ul de procesare devine egal cu cel original
-            self.batch_cache = self.base_data.copy() if hasattr(self, 'base_data') else {}
-            return
-            
-        # Pasul 2: Dacă avem operații în stivă, le executăm secvențial în RAM
-        # Luăm ca punct de pornire imaginile originale
-        temp_data = self.base_data.copy() if hasattr(self, 'base_data') else {}
-        
-        for op in self.operation_stack:
-            nume_filtru = op["nume"]
-            k_size = op["kernel"]
-            
-            # Asigură-te că dimensiunea rămâne impară pentru OpenCV
+        # --- FUNCȚIE AJUTĂTOARE: Procesează logica OpenCV o singură dată ---
+        def aplica_filtru(img, nume_filtru, k_size):
             if k_size % 2 == 0:
                 k_size += 1
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_size, k_size))
             
-            # Aplicăm filtrul corespunzător pe fiecare cadru din memorie
-            for file_name, img in temp_data.items():
-                if nume_filtru == "Eroziune":
-                    temp_data[file_name] = cv2.erode(img, kernel)
-                elif nume_filtru == "Dilatare":
-                    temp_data[file_name] = cv2.dilate(img, kernel)
-                elif nume_filtru == "Deschidere":
-                    temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
-                elif nume_filtru == "Închidere":
-                    temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel)
-                elif nume_filtru == "Top-Hat":
-                    temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_TOPHAT, kernel)
-                elif nume_filtru == "Black-Hat":
-                    temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, kernel)
-                elif nume_filtru == "Gradient":
-                    temp_data[file_name] = cv2.morphologyEx(img, cv2.MORPH_GRADIENT, kernel)
-        # La final, salvăm rezultatul cumulat în cache-ul folosit de UI pentru afișare
-        self.batch_cache = temp_data
+            if nume_filtru == "Eroziune":
+                return cv2.erode(img, kernel)
+            elif nume_filtru == "Dilatare":
+                return cv2.dilate(img, kernel)
+            elif nume_filtru == "Deschidere":
+                return cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
+            elif nume_filtru == "Închidere":
+                return cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel)
+            elif nume_filtru == "Top-Hat":
+                return cv2.morphologyEx(img, cv2.MORPH_TOPHAT, kernel)
+            elif nume_filtru == "Black-Hat":
+                return cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, kernel)
+            elif nume_filtru == "Gradient":
+                return cv2.morphologyEx(img, cv2.MORPH_GRADIENT, kernel)
+            return img
+
+        # --- 1. RECALCULARE PENTRU BATCH / PIPELINE ---
+        if hasattr(self, 'base_data') and self.base_data:
+            temp_data = self.base_data.copy()
+            for op in self.operation_stack:
+                for file_name, img in temp_data.items():
+                    temp_data[file_name] = aplica_filtru(img, op["nume"], op["kernel"])
+            self.batch_cache = temp_data
+
+        # --- 2. RECALCULARE PENTRU SINGLE IMAGE ---
+        if hasattr(self, 'image_original') and self.image_original is not None:
+            temp_img = self.image_original.copy()
+            
+            # Reaplicăm toate filtrele rămase în stivă peste imaginea originală
+            for op in self.operation_stack:
+                temp_img = aplica_filtru(temp_img, op["nume"], op["kernel"])
+                
+            self.image_processed = temp_img
