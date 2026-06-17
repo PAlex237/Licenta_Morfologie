@@ -44,7 +44,7 @@ class MorphoApp(ctk.CTk):
         
     def _build_sidebar(self):
         # --- SIDEBAR FRAME ---
-        self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0)
+        self.sidebar_frame = ctk.CTkFrame(self, width=290, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, rowspan=10, sticky="nsew")
         self.sidebar_frame.grid_propagate(False) 
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
@@ -101,7 +101,7 @@ class MorphoApp(ctk.CTk):
 
         # --- PANOUL DE SESIUNE (ISTORIC) ---
         # Creăm un cadru dedicat pentru istoric, pe care îl punem în interfață (ex: în partea dreaptă)
-        self.session_panel = ctk.CTkFrame(self, width=320, corner_radius=10)
+        self.session_panel = ctk.CTkFrame(self, width=290, corner_radius=10)
         self.session_panel.grid(row=0, column=2, rowspan=10, sticky="nsew", padx=(0, 10), pady=10)
         self.session_panel.grid_propagate(False)
         self.session_panel.grid_columnconfigure(0, weight=1)
