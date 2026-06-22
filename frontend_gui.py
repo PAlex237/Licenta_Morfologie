@@ -287,12 +287,7 @@ class MorphoApp(ctk.CTk):
             font=ctk.CTkFont(size=16, weight="bold"),
             command=self.show_right_panel)
     def _build_context_menu(self):
-        """Construiește meniul nativ care va apărea la click dreapta."""
         self.context_menu = tk.Menu(self, tearoff=0, bg="#2b2b2b", fg="white", font=("Arial", 11))
-        self.context_menu.add_command(label="➕ Adaugă Label...", command=self._activate_drawing_mode)
-        self.context_menu.add_command(label="🗑 Șterge toate Label-urile", command=self._clear_current_labels)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="💾 Salvează imaginea", command=self._save_slice_with_labels)
     
     # ------------------------------------------------------------------
     # Panouri laterale
@@ -960,9 +955,56 @@ class MorphoApp(ctk.CTk):
     # ------------------------------------------------------------------
 
     def _show_context_menu(self, event):
-        """Afișează meniul doar dacă avem o imagine procesată pe ecran."""
+        """Construiește meniul dinamic și verifică dacă am dat click pe un label existent."""
         if self.pil_image_proc is not None:
-            # Afișăm meniul exact la coordonatele cursorului
+            # 1. Golim meniul vechi
+            self.context_menu.delete(0, 'end')
+            
+            # 2. Adăugăm opțiunile standard
+            self.context_menu.add_command(label="➕ Adaugă Label...", command=self._activate_drawing_mode)
+            self.context_menu.add_command(label="🗑 Șterge toate Label-urile", command=self._clear_current_labels)
+            
+            # 3. Calculăm coordonatele reale ale click-ului pe imagine
+            w = max(self.canvas_proc.winfo_width(), 400)
+            h = max(self.canvas_proc.winfo_height(), 400)
+            center_x = (w // 2) + self.pan_x
+            center_y = (h // 2) + self.pan_y
+            img_w = self.pil_image_proc.width
+            img_h = self.pil_image_proc.height
+            
+            ix = (event.x - center_x) / self.zoom_scale + img_w / 2
+            iy = (event.y - center_y) / self.zoom_scale + img_h / 2
+            
+            # 4. Verificăm dacă click-ul a picat în interiorul unui label existent
+            labels = self.labels_memory.get(self.current_file_name, [])
+            clicked_idx = -1
+            clicked_name = ""
+            
+            # Căutăm invers (pentru a selecta ultimul label desenat dacă se suprapun)
+            for i in range(len(labels) - 1, -1, -1):
+                lbl = labels[i]
+                min_x, max_x = min(lbl["x1"], lbl["x2"]), max(lbl["x1"], lbl["x2"])
+                min_y, max_y = min(lbl["y1"], lbl["y2"]), max(lbl["y1"], lbl["y2"])
+                
+                # Dacă coordonatele mouse-ului sunt în interiorul chenarului
+                if min_x <= ix <= max_x and min_y <= iy <= max_y:
+                    clicked_idx = i
+                    clicked_name = lbl["nume"]
+                    break
+                    
+            # 5. Dacă am găsit un label, adăugăm butonul special de ștergere individuală
+            if clicked_idx != -1:
+                self.context_menu.add_separator()
+                self.context_menu.add_command(
+                    label=f"❌ Șterge Label-ul '{clicked_name}'", 
+                    command=lambda idx=clicked_idx: self._delete_single_label(idx)
+                )
+
+            # 6. Adăugăm opțiunea de salvare la final
+            self.context_menu.add_separator()
+            self.context_menu.add_command(label="💾 Salvează imaginea", command=self._save_slice_with_labels)
+
+            # 7. Afișăm meniul pe ecran
             self.context_menu.tk_popup(event.x_root, event.y_root)
 
     def _activate_drawing_mode(self):
@@ -978,6 +1020,15 @@ class MorphoApp(ctk.CTk):
             self.labels_memory[self.current_file_name] = []
             self._redraw_canvas(self.canvas_proc)
             self.status_bar.configure(text=f"Stare: Toate etichetele au fost șterse.")
+
+    def _delete_single_label(self, idx: int):
+        """Șterge un singur label de pe imaginea curentă bazat pe index."""
+        labels = self.labels_memory.get(self.current_file_name, [])
+        if 0 <= idx < len(labels):
+            nume = labels[idx]["nume"]
+            del labels[idx]  # Ștergem din listă
+            self._redraw_canvas(self.canvas_proc)  # Re-randăm ecranul
+            self.status_bar.configure(text=f"Stare: Label-ul '{nume}' a fost șters.")
 
     def _save_slice_with_labels(self):
         """Salvează felia curentă cu adnotările aplicate definitiv via OpenCV."""
