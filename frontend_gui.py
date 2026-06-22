@@ -541,6 +541,10 @@ class MorphoApp(ctk.CTk):
         val_obiectiv = self.operator_dropdown.get()
         val_intensitate = self.intensity_dropdown.get()
 
+        if val_obiectiv == "Fără Filtru":
+            self.status_bar.configure(text="Stare: Selectați un filtru valid pentru a-l adăuga în istoric.")
+            return
+
         op_tehnic = self.HARTA_OPERATORI.get(val_obiectiv, "Deschidere")
         kernel = self.HARTA_INTENSITATE.get(val_intensitate, 3)
 
