@@ -24,6 +24,7 @@ class MorphoApp(ctk.CTk):
     # ------------------------------------------------------------------
 
     HARTA_OPERATORI = {
+        "Fără Filtru":                   "Niciunul",
         "Filtrare Zgomot de Fond":       "Deschidere",
         "Solidificare Structuri":        "Închidere",
         "Evidențiere Micro-leziuni":     "Top-Hat",
@@ -84,7 +85,21 @@ class MorphoApp(ctk.CTk):
         self._build_sidebar()
         self._build_main_area()
         self._build_panel_toggle_buttons()
+        # --- Variabile pentru Modul Focus (Navigare Tastatură) ---
+        self._op_keys = list(self.HARTA_OPERATORI.keys())
+        self._int_keys = list(self.HARTA_INTENSITATE.keys())
+        self._focus_op_idx = 0
+        self._focus_int_idx = 0
+        self._is_space_pressed = False
 
+        # --- Evenimente de tastatură globale ---
+        self.bind("<Up>", self._on_key_up)
+        self.bind("<Down>", self._on_key_down)
+        self.bind("<Left>", self._on_key_left)
+        self.bind("<Right>", self._on_key_right)
+        self.bind("<Return>", self._on_key_enter)
+        self.bind("<KeyPress-space>", self._on_space_press)
+        self.bind("<KeyRelease-space>", self._on_space_release)
     # ------------------------------------------------------------------
     # Construire UI
     # ------------------------------------------------------------------
@@ -231,12 +246,29 @@ class MorphoApp(ctk.CTk):
         self.slice_slider.pack(fill="x", padx=30, pady=(5, 15))
         self.nav_frame.grid_remove()
 
+        # --- Panou de Control pentru Modul Focus ---
+        self.focus_control_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.focus_control_frame.grid(row=2, column=0, columnspan=2, pady=(0, 15), sticky="ew")
+
+        self.focus_control_frame.grid_columnconfigure(0, weight=1, uniform="focus_cols")
+        self.focus_control_frame.grid_columnconfigure(1, weight=0)
+        self.focus_control_frame.grid_columnconfigure(2, weight=1, uniform="focus_cols")
+
+        self.lbl_focus_op = ctk.CTkLabel(
+            self.focus_control_frame, text="", 
+            font=ctk.CTkFont(size=14, weight="bold"), text_color="#28a745")
+        
         self.btn_focus = ctk.CTkButton(
-            self.main_frame, text="⤢ Mod Focus", height=40, width=100,
+            self.focus_control_frame, text="Mod Focus", height=40, width=120,
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="#1f538d", hover_color="#14395e",
             command=self.toggle_focus_mode)
-        self.btn_focus.grid(row=2, column=0, columnspan=2, padx=100, pady=(0, 15))
+            
+        self.btn_focus.grid(row=0, column=1, padx=20)
+
+        self.lbl_focus_int = ctk.CTkLabel(
+            self.focus_control_frame, text="", 
+            font=ctk.CTkFont(size=14, weight="bold"), text_color="#b35900")
 
         self.status_bar = ctk.CTkLabel(
             self.main_frame, text="Stare: Așteptare date de intrare.",
@@ -283,15 +315,41 @@ class MorphoApp(ctk.CTk):
         self.session_panel.grid()
 
     def toggle_focus_mode(self):
-        if self._focus_mode:
+        if getattr(self, '_focus_mode', False):
+            # --- Ieșire din Focus ---
             self.show_left_panel()
             self.show_right_panel()
             self.btn_focus.configure(text="⤢ Mod Focus")
+            
+            self.operator_dropdown.set(self._op_keys[self._focus_op_idx])
+            self.intensity_dropdown.set(self._int_keys[self._focus_int_idx])
+            
+            # Folosim grid_remove în loc de pack_forget
+            self.lbl_focus_op.grid_remove()
+            self.lbl_focus_int.grid_remove()
+            self._focus_mode = False
+            
+            self._update_display_after_stack_change()
         else:
+            # --- Intrare în Focus ---
             self.hide_left_panel()
             self.hide_right_panel()
-            self.btn_focus.configure(text="⤡ Mod Editare")
-        self._focus_mode = not self._focus_mode
+            self.btn_focus.configure(text="Mod Editare")
+            
+            curr_op = self.operator_dropdown.get()
+            curr_int = self.intensity_dropdown.get()
+            self._focus_op_idx = self._op_keys.index(curr_op) if curr_op in self._op_keys else 0
+            self._focus_int_idx = self._int_keys.index(curr_int) if curr_int in self._int_keys else 0
+            
+            self._update_focus_labels()
+            
+            # Le plasăm în grid: stânga (col 0) și dreapta (col 2)
+            self.lbl_focus_op.grid(row=0, column=0, sticky="e", padx=20)
+            self.lbl_focus_int.grid(row=0, column=2, sticky="w", padx=20)
+            
+            self._focus_mode = True
+            self.focus_set()
+            self._render_focus_preview()
 
     # ------------------------------------------------------------------
     # Dialoguri personalizate
@@ -580,6 +638,9 @@ class MorphoApp(ctk.CTk):
             self.display_image(proc, self.canvas_proc)
         else:
             self._clear_processed_label()
+
+        if getattr(self, '_focus_mode', False):
+            self._render_focus_preview()
 
     # ------------------------------------------------------------------
     # Afișare imagini pe Canvas
@@ -975,3 +1036,96 @@ class MorphoApp(ctk.CTk):
             cv2.imwrite(path, export_img)
             self.show_custom_message("Salvare Reușită", f"Imaginea adnotată a fost salvată:\n{os.path.basename(path)}", "info")
             self.status_bar.configure(text="Stare: Imagine adnotată salvată cu succes.")
+
+    # ------------------------------------------------------------------
+    # Navigare Tastatură și Live Preview (Mod Focus)
+    # ------------------------------------------------------------------
+
+    def _update_focus_labels(self):
+        self.lbl_focus_op.configure(text=f"←  {self._op_keys[self._focus_op_idx]}  →")
+        self.lbl_focus_int.configure(text=f"↓  {self._int_keys[self._focus_int_idx]}  ↑")
+
+    def _get_current_base_image_for_preview(self):
+        """Aduce imaginea de bază peste care vom aplica filtrul temporar."""
+        if self.current_file_name == "imagine_unica":
+            img = self.backend.get_processed_image()
+            return img if img is not None else self.backend.get_original_image()
+        else:
+            img = self.backend.batch_cache.get(self.current_file_name)
+            return img if img is not None else self.backend.base_data.get(self.current_file_name)
+
+    def _render_focus_preview(self):
+        """Aplică filtrul curent doar vizual, fără a-l salva în memorie."""
+        base_img = self._get_current_base_image_for_preview()
+        if base_img is None:
+            return
+
+        op_clinic = self._op_keys[self._focus_op_idx]
+        int_clinic = self._int_keys[self._focus_int_idx]
+
+        # Dacă e pe "Fără Filtru" sau utilizatorul ține apăsat SPACE
+        if op_clinic == "Fără Filtru" or self._is_space_pressed:
+            self.display_image(base_img, self.canvas_proc)
+        else:
+            op_tehnic = self.HARTA_OPERATORI[op_clinic]
+            k_size = self.HARTA_INTENSITATE[int_clinic]
+            # Calculăm și afișăm doar temporar (folosim .copy() ca să nu murdărim originalul)
+            preview_img = MorphoBackend._aplica_filtru(base_img.copy(), op_tehnic, k_size)
+            self.display_image(preview_img, self.canvas_proc)
+
+    # --- Handlere Taste ---
+
+    def _on_key_up(self, event):
+        if not self._focus_mode: return
+        self._focus_int_idx = (self._focus_int_idx + 1) % len(self._int_keys)
+        self._update_focus_labels()
+        self._render_focus_preview()
+
+    def _on_key_down(self, event):
+        if not self._focus_mode: return
+        self._focus_int_idx = (self._focus_int_idx - 1) % len(self._int_keys)
+        self._update_focus_labels()
+        self._render_focus_preview()
+
+    def _on_key_left(self, event):
+        if not self._focus_mode: return
+        self._focus_op_idx = (self._focus_op_idx - 1) % len(self._op_keys)
+        self._update_focus_labels()
+        self._render_focus_preview()
+
+    def _on_key_right(self, event):
+        if not self._focus_mode: return
+        self._focus_op_idx = (self._focus_op_idx + 1) % len(self._op_keys)
+        self._update_focus_labels()
+        self._render_focus_preview()
+
+    def _on_space_press(self, event):
+        if not self._focus_mode or self._is_space_pressed: return
+        self._is_space_pressed = True
+        self._render_focus_preview()  # Afișează originalul
+
+    def _on_space_release(self, event):
+        if not self._focus_mode: return
+        self._is_space_pressed = False
+        self._render_focus_preview()  # Revine la preview-ul filtrului
+
+    def _on_key_enter(self, event):
+        if not self._focus_mode: return
+        
+        op_clinic = self._op_keys[self._focus_op_idx]
+        if op_clinic == "Fără Filtru":
+            self.status_bar.configure(text="Stare: Nu s-a adăugat niciun filtru în istoric.")
+            return
+            
+        int_clinic = self._int_keys[self._focus_int_idx]
+        op_tehnic = self.HARTA_OPERATORI[op_clinic]
+        kernel = self.HARTA_INTENSITATE[int_clinic]
+        
+        # Trimitem operația către backend pentru procesare definitivă
+        operatie = Operatie(nume_clinic=op_clinic, intensitate_text=int_clinic, nume=op_tehnic, kernel=kernel)
+        self.backend.adauga_operatie(operatie)
+        
+        self.render_session_timeline()
+        self.status_bar.configure(text=f"Stare: Filtrul '{op_clinic}' a fost aplicat definitiv.")
+        # După aplicare, re-randăm preview-ul peste noul strat de bază creat
+        self._render_focus_preview()
