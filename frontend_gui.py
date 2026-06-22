@@ -520,9 +520,13 @@ class MorphoApp(ctk.CTk):
         ctk_img = ctk.CTkImage(pil_img, size=(700, 700))
         lbl.configure(image=ctk_img, text="")
         lbl.image = ctk_img  # Prevenim garbage collection
+    def _clear_label_image(self, lbl, placeholder_text):
+        dummy_img = ctk.CTkImage(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), size=(1, 1))
+        lbl.configure(image=dummy_img, text=placeholder_text)
+        lbl.image = dummy_img  # Ștergem complet vechea referință din memoria RAM
 
     def _clear_processed_label(self):
-        self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
+        self._clear_label_image(self.lbl_proc_img, "Așteptare prelucrare...")
 
     def _refresh_processed_display(self):
         """Actualizează panoul cu rezultatul procesării (mod Single Image)."""
@@ -595,27 +599,25 @@ class MorphoApp(ctk.CTk):
             self.status_bar.configure(text="Stare: Ultima operație anulată.")
 
     def reset_session(self):
-        # 1. Resetăm stiva de operatori din backend
+        # 1. Resetăm stiva de operatori
         self.backend.reset()
         
-        # 2. Golim complet datele din memorie (Backend)
+        # 2. Golire completă din memorie
         self.backend.image_original = None
         self.backend.image_processed = None
         self.backend.base_data = {}
         self.backend.batch_cache = {}
 
-        # 3. Golim datele de navigare (Frontend)
+        # 3. Resetare elemente de navigare UI
         self.active_batch_folder = None
         self.slice_files_list = []
         self.nav_frame.grid_remove()
         self.btn_save_batch.configure(state="disabled")
 
-        # 4. Resetăm etichetele UI la starea inițială (sloturi goale cu text)
-        self.lbl_orig_img.configure(image=None, text="Așteptare input...")
-        self.lbl_proc_img.configure(image=None, text="Așteptare prelucrare...")
-        # ------------------------------------------------------------------
+        self._clear_label_image(self.lbl_orig_img, "Așteptare input...")
+        self._clear_label_image(self.lbl_proc_img, "Așteptare prelucrare...")
 
-        # 5. Randăm UI-ul actualizat
+        # 4. Re-randăm UI-ul
         self.render_session_timeline()
         self.status_bar.configure(text="Stare: Sesiune resetată.")
 
