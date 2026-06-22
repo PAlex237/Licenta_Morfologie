@@ -5,7 +5,6 @@ O aplicație desktop avansată, dezvoltată în Python, concepută pentru vizual
 Proiectul este optimizat pentru preprocesarea imaginilor obținute prin Rezonanță Magnetică (RMN / MRI), oferind suport critic în izolarea structurilor anatomice complexe, reducerea zgomotului de fond și facilitarea segmentării formațiunilor tumorale. Aplicația utilizează o arhitectură modulară decuplată (Core-GUI), asigurând o viteză ridicată de procesare prin mecanisme de caching direct în memoria RAM (In-Memory Processing).
 
 ![Interfața Principală](assets/main_interface.png)
-*(Adaugă aici o captură de ecran cu interfața principală a aplicației)*
 
 ---
 
@@ -22,7 +21,6 @@ Proiectul este optimizat pentru preprocesarea imaginilor obținute prin Rezonan�
 * **Modul "Hold to Compare":** Funcționalitate avansată la apăsarea tastei `SPACE` pentru comutarea rapidă între imaginea originală și previzualizarea filtrului curent.
 
 ![Mod Focus](assets/focus_mode.png)
-*(Adaugă aici o captură de ecran cu modul focus activat)*
 
 ### 3. Sistem Avansat de Adnotare Medicală (Labeling)
 * **Bounding Boxes:** Desenare interactivă de chenare direct pe planșa procesată (cu transformări matematice precise la Zoom/Pan).
@@ -30,7 +28,6 @@ Proiectul este optimizat pentru preprocesarea imaginilor obținute prin Rezonan�
 * **Export cu Overlay:** Salvarea cadrelor de interes cu adnotările și textul suprapuse direct pe matricea de pixeli, utile pentru rapoarte clinice.
 
 ![Sistem Adnotare](assets/labeling.png)
-*(Adaugă aici o captură de ecran cu meniul contextual și un chenar desenat)*
 
 ### 4. Istoric de Operații (Stacking Pipeline)
 * Construirea de pipeline-uri complexe (ex: Deschidere → Eroziune → Top-Hat).
