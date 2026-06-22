@@ -1,7 +1,4 @@
-"""
-MorfoMed – Punct de intrare
-Rulează: python main.py
-"""
+
 
 from frontend_gui import MorphoApp
 

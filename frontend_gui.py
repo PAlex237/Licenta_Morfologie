@@ -660,8 +660,8 @@ class MorphoApp(ctk.CTk):
                 canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=color, width=2)
                 
                 # Desenăm un fundal pentru text ca să fie lizibil pe raze RMN
-                text_len = len(lbl["nume"]) * 7
-                canvas.create_rectangle(cx1, cy1 - 22, cx1 + text_len + 10, cy1, fill=color, outline=color)
+                text_len = len(lbl["nume"]) * 9
+                canvas.create_rectangle(cx1, cy1 - 22, cx1 + text_len + 15, cy1, fill=color, outline=color)
                 canvas.create_text(cx1 + 5, cy1 - 11, text=lbl["nume"], fill="black", anchor="w", font=("Arial", 11, "bold"))
     
     def _clear_canvas(self, canvas):
