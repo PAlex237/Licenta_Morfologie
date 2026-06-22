@@ -9,6 +9,7 @@ import customtkinter as ctk
 from tkinter import filedialog
 from PIL import Image, ImageTk
 from typing import List, Optional
+import tkinter as tk
 
 from backend_morph import MorphoBackend, Operatie
 
@@ -62,6 +63,17 @@ class MorphoApp(ctk.CTk):
         self._pan_start_y: int = 0
         self.pil_image_orig: Optional[Image.Image] = None
         self.pil_image_proc: Optional[Image.Image] = None
+
+        # --- Variabile pentru Labeling (Adnotări) ---
+        # Format așteptat: {"slice_001.png": [{"nume": "Tumoare", "x1": 10, "y1": 10, "x2": 50, "y2": 50}], ...}
+        self.labels_memory = {} 
+        self.is_drawing_mode = False
+        self.temp_rect_id = None
+        self._draw_start_x = 0
+        self._draw_start_y = 0
+        
+        self._build_context_menu()
+
 
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
@@ -201,7 +213,7 @@ class MorphoApp(ctk.CTk):
             canvas.bind("<MouseWheel>", self._on_zoom)
             canvas.bind("<ButtonPress-1>", self._on_pan_start)
             canvas.bind("<B1-Motion>", self._on_pan_drag)
-
+        self.canvas_proc.bind("<Button-3>", self._show_context_menu)
         self.nav_frame = ctk.CTkFrame(self.main_frame, height=80, corner_radius=10)
         self.nav_frame.grid(row=1, column=0, columnspan=2, padx=15, pady=(0, 15), sticky="ew")
 
@@ -240,7 +252,14 @@ class MorphoApp(ctk.CTk):
             self, text="◀", width=30, height=40,
             font=ctk.CTkFont(size=16, weight="bold"),
             command=self.show_right_panel)
-
+    def _build_context_menu(self):
+        """Construiește meniul nativ care va apărea la click dreapta."""
+        self.context_menu = tk.Menu(self, tearoff=0, bg="#2b2b2b", fg="white", font=("Arial", 11))
+        self.context_menu.add_command(label="➕ Adaugă Label...", command=self._activate_drawing_mode)
+        self.context_menu.add_command(label="🗑 Șterge toate Label-urile", command=self._clear_current_labels)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="💾 Salvează imaginea", command=self._save_slice_with_labels)
+    
     # ------------------------------------------------------------------
     # Panouri laterale
     # ------------------------------------------------------------------
@@ -730,3 +749,22 @@ class MorphoApp(ctk.CTk):
             self.on_slice_slider_move(self.slice_slider.get())
         else:
             self._refresh_processed_display()
+            
+    # ------------------------------------------------------------------
+    # Funcționalitate Adnotări (Labeling)
+    # ------------------------------------------------------------------
+
+    def _show_context_menu(self, event):
+        """Afișează meniul doar dacă avem o imagine procesată pe ecran."""
+        if self.pil_image_proc is not None:
+            # Afișăm meniul exact la coordonatele cursorului
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _activate_drawing_mode(self):
+        print("DEBUG: Modul de desenare va fi activat în Pasul 2.")
+        
+    def _clear_current_labels(self):
+        print("DEBUG: Label-urile vor fi șterse.")
+
+    def _save_slice_with_labels(self):
+        print("DEBUG: Imaginea va fi salvată cu OpenCV în Pasul 4.")
