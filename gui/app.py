@@ -1,72 +1,53 @@
-"""
-MorfoMed – Frontend (CustomTkinter)
-Responsabil exclusiv pentru UI. Nu conține logică de procesare.
-"""
-
 import os
 import cv2
 import customtkinter as ctk
 from tkinter import filedialog
 from PIL import Image, ImageTk
-from typing import List, Optional
 import tkinter as tk
 
-from backend_morph import MorphoBackend, Operatie
+# logica si modelele
+from core.backend_morph import MorphoBackend
+from core.models import Operatie
+
+# setările și ferestrele 
+from gui.config import HARTA_OPERATORI, HARTA_INTENSITATE
+from gui.dialogs import show_custom_message, ask_label_name, ask_custom_folder_name
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 
-class MorphoApp(ctk.CTk):
-
-    # ------------------------------------------------------------------
-    # Hărți clinice → tehnice (definite o singură dată, la nivel de clasă)
-    # ------------------------------------------------------------------
-
-    HARTA_OPERATORI = {
-        "Fără Filtru":                   "Niciunul",
-        "Filtrare Zgomot de Fond":       "Deschidere",
-        "Solidificare Structuri":        "Închidere",
-        "Evidențiere Micro-leziuni":     "Top-Hat",
-        "Conturare Tumorală":            "Gradient",
-        "Amplificare Regiuni Întunecate": "Black-Hat",
-    }
-
-    HARTA_INTENSITATE = {
-        "Fină":      3,
-        "Medie":     5,
-        "Puternică": 7,
-    }
-
-    # ------------------------------------------------------------------
-    # Inițializare
-    # ------------------------------------------------------------------
+class MainApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
 
-        self.title("MorfoMed")
+        self.title("Proiect Licență - Procesare Imagistică")
         self.geometry("1200x850")
+        
+        # dăm maximize la fereastră imediat cum pornește
         self.after(0, lambda: self.state("zoomed"))
 
         self.backend = MorphoBackend()
-        self.active_batch_folder: Optional[str] = None
-        self.slice_files_list: List[str] = []
-        self._focus_mode: bool = False          # Flag explicit – nu mai citim vizibilitatea widget-ului
-        self._drag_start_y: int = 0
-        self._drag_start_index: int = 0
+        self.active_batch_folder = None
+        self.slice_files_list = []
+        
+        # flag ca să știm dacă ne plimbăm prin filtre din săgeți
+        self._focus_mode = False          
+        self._drag_start_y = 0
+        self._drag_start_index = 0
 
-        # Variabile pentru Zoom 
-        self.zoom_scale: float = 1.0
-        self.pan_x: int = 0
-        self.pan_y: int = 0
-        self._pan_start_x: int = 0
-        self._pan_start_y: int = 0
-        self.pil_image_orig: Optional[Image.Image] = None
-        self.pil_image_proc: Optional[Image.Image] = None
+        # variabilele cu care ținem minte starea de zoom și pan pe ecran
+        self.zoom_scale = 1.0
+        self.pan_x = 0
+        self.pan_y = 0
+        self._pan_start_x = 0
+        self._pan_start_y = 0
+        self.pil_image_orig = None
+        self.pil_image_proc = None
 
-        # --- Variabile pentru Labeling (Adnotări) ---
-        # Format așteptat: {"slice_001.png": [{"nume": "Tumoare", "x1": 10, "y1": 10, "x2": 50, "y2": 50}], ...}
+        # memorie pentru chenarele desenate manual
+        # arată cam așa: {"felia_01.png": [{"nume": "Tumoare", "x1": 10, ...}]}
         self.labels_memory = {} 
         self.current_file_name = "imagine_unica"
         self.is_drawing_mode = False
@@ -74,25 +55,28 @@ class MorphoApp(ctk.CTk):
         self._draw_start_x = 0
         self._draw_start_y = 0
         
+        # pregătim meniul de click dreapta
         self._build_context_menu()
 
-
+        # așezăm coloanele pe ecran (stânga, centru, dreapta)
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=0)
         self.grid_rowconfigure(0, weight=1)
 
+        # construim bucățile de interfață
         self._build_sidebar()
         self._build_main_area()
         self._build_panel_toggle_buttons()
-        # --- Variabile pentru Modul Focus (Navigare Tastatură) ---
-        self._op_keys = list(self.HARTA_OPERATORI.keys())
-        self._int_keys = list(self.HARTA_INTENSITATE.keys())
+
+        # luăm tastele din config pentru a putea naviga rapid
+        self._op_keys = list(HARTA_OPERATORI.keys())
+        self._int_keys = list(HARTA_INTENSITATE.keys())
         self._focus_op_idx = 0
         self._focus_int_idx = 0
         self._is_space_pressed = False
 
-        # --- Evenimente de tastatură globale ---
+        # legăm butoanele de pe tastatură la funcțiile noastre
         self.bind("<Up>", self._on_key_up)
         self.bind("<Down>", self._on_key_down)
         self.bind("<Left>", self._on_key_left)
@@ -100,9 +84,8 @@ class MorphoApp(ctk.CTk):
         self.bind("<Return>", self._on_key_enter)
         self.bind("<KeyPress-space>", self._on_space_press)
         self.bind("<KeyRelease-space>", self._on_space_release)
-    # ------------------------------------------------------------------
-    # Construire UI
-    # ------------------------------------------------------------------
+
+    # --- Construire layout principal ---
 
     def _build_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(self, width=290, corner_radius=0)
@@ -110,7 +93,6 @@ class MorphoApp(ctk.CTk):
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
 
-        # Header
         header = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(25, 15))
         header.grid_columnconfigure(0, weight=1)
@@ -122,7 +104,6 @@ class MorphoApp(ctk.CTk):
                       fg_color="transparent", border_width=1,
                       command=self.hide_left_panel).grid(row=0, column=1, sticky="e", padx=(10, 0))
 
-        # Tab-uri
         self.tabview = ctk.CTkTabview(self.sidebar_frame, command=self.on_tab_change)
         self.tabview.grid(row=1, column=0, padx=15, pady=5, sticky="ew")
         self.tabview.add("Single Image")
@@ -150,20 +131,19 @@ class MorphoApp(ctk.CTk):
             state="disabled", command=self.gui_save_batch)
         self.btn_save_batch.pack(pady=(25, 10), fill="x", padx=10)
 
-        # Setări procesare
         ctk.CTkLabel(self.sidebar_frame, text="Setări Procesare:",
                      font=ctk.CTkFont(size=16, weight="bold"),
                      anchor="w").grid(row=2, column=0, padx=20, pady=(25, 10), sticky="w")
 
         self.operator_dropdown = ctk.CTkOptionMenu(
             self.sidebar_frame,
-            values=list(self.HARTA_OPERATORI.keys()),
+            values=list(HARTA_OPERATORI.keys()),
             height=35)
         self.operator_dropdown.grid(row=3, column=0, padx=20, pady=5, sticky="ew")
 
         self.intensity_dropdown = ctk.CTkOptionMenu(
             self.sidebar_frame,
-            values=list(self.HARTA_INTENSITATE.keys()),
+            values=list(HARTA_INTENSITATE.keys()),
             height=35)
         self.intensity_dropdown.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
 
@@ -172,7 +152,7 @@ class MorphoApp(ctk.CTk):
                       command=self.gui_apply_processing).grid(
             row=6, column=0, padx=20, pady=35, sticky="ew")
 
-        # Panou sesiune (dreapta)
+        # panoul cu istoricul modificărilor (dreapta)
         self.session_panel = ctk.CTkFrame(self, width=290, corner_radius=10)
         self.session_panel.grid(row=0, column=2, rowspan=10, sticky="nsew",
                                 padx=(0, 10), pady=10)
@@ -225,12 +205,15 @@ class MorphoApp(ctk.CTk):
         self.canvas_proc = ctk.CTkCanvas(frame_proc, bg="#1e1e1e", highlightthickness=0)
         self.canvas_proc.pack(expand=True, fill="both", padx=15, pady=15)
 
+        # legăm controalele de mouse pentru ambele ecrane
         for canvas in (self.canvas_orig, self.canvas_proc):
             canvas.bind("<MouseWheel>", self._on_zoom)
             canvas.bind("<ButtonPress-1>", self._on_pan_start)
             canvas.bind("<B1-Motion>", self._on_pan_drag)
             canvas.bind("<ButtonRelease-1>", self._on_mouse_release)  
+            
         self.canvas_proc.bind("<Button-3>", self._show_context_menu)
+        
         self.nav_frame = ctk.CTkFrame(self.main_frame, height=80, corner_radius=10)
         self.nav_frame.grid(row=1, column=0, columnspan=2, padx=15, pady=(0, 15), sticky="ew")
 
@@ -246,7 +229,7 @@ class MorphoApp(ctk.CTk):
         self.slice_slider.pack(fill="x", padx=30, pady=(5, 15))
         self.nav_frame.grid_remove()
 
-        # --- Panou de Control pentru Modul Focus ---
+        # controller-ul pentru modul focus (navigarea din săgeți)
         self.focus_control_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         self.focus_control_frame.grid(row=2, column=0, columnspan=2, pady=(0, 15), sticky="ew")
 
@@ -259,7 +242,7 @@ class MorphoApp(ctk.CTk):
             font=ctk.CTkFont(size=14, weight="bold"), text_color="#28a745")
         
         self.btn_focus = ctk.CTkButton(
-            self.focus_control_frame, text="Mod Focus", height=40, width=120,
+            self.focus_control_frame, text="[+] Mod Focus", height=40, width=120,
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="#1f538d", hover_color="#14395e",
             command=self.toggle_focus_mode)
@@ -276,7 +259,7 @@ class MorphoApp(ctk.CTk):
         self.status_bar.grid(row=3, column=0, columnspan=2, padx=20, pady=(0, 10), sticky="ew")
 
     def _build_panel_toggle_buttons(self):
-        """Butoanele mici de redeschidere a panourilor, create după ce toate frame-urile există."""
+        # butoanele mici care apar cand ascundem panourile
         self.btn_show_left = ctk.CTkButton(
             self, text="▶", width=30, height=40,
             font=ctk.CTkFont(size=16, weight="bold"),
@@ -286,12 +269,11 @@ class MorphoApp(ctk.CTk):
             self, text="◀", width=30, height=40,
             font=ctk.CTkFont(size=16, weight="bold"),
             command=self.show_right_panel)
+
     def _build_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=0, bg="#2b2b2b", fg="white", font=("Arial", 11))
     
-    # ------------------------------------------------------------------
-    # Panouri laterale
-    # ------------------------------------------------------------------
+    # --- Ascundere / Afișare panouri ---
 
     def hide_left_panel(self):
         self.sidebar_frame.grid_remove()
@@ -311,25 +293,24 @@ class MorphoApp(ctk.CTk):
 
     def toggle_focus_mode(self):
         if getattr(self, '_focus_mode', False):
-            # --- Ieșire din Focus ---
+            # ieșim din modul rapid și refacem interfața clasică
             self.show_left_panel()
             self.show_right_panel()
-            self.btn_focus.configure(text="⤢ Mod Focus")
+            self.btn_focus.configure(text="[+] Mod Focus")
             
             self.operator_dropdown.set(self._op_keys[self._focus_op_idx])
             self.intensity_dropdown.set(self._int_keys[self._focus_int_idx])
             
-            # Folosim grid_remove în loc de pack_forget
             self.lbl_focus_op.grid_remove()
             self.lbl_focus_int.grid_remove()
             self._focus_mode = False
             
             self._update_display_after_stack_change()
         else:
-            # --- Intrare în Focus ---
+            # ascundem panourile și trecem pe tastatură
             self.hide_left_panel()
             self.hide_right_panel()
-            self.btn_focus.configure(text="Mod Editare")
+            self.btn_focus.configure(text="[-] Mod Editare")
             
             curr_op = self.operator_dropdown.get()
             curr_int = self.intensity_dropdown.get()
@@ -338,7 +319,6 @@ class MorphoApp(ctk.CTk):
             
             self._update_focus_labels()
             
-            # Le plasăm în grid: stânga (col 0) și dreapta (col 2)
             self.lbl_focus_op.grid(row=0, column=0, sticky="e", padx=20)
             self.lbl_focus_int.grid(row=0, column=2, sticky="w", padx=20)
             
@@ -346,113 +326,7 @@ class MorphoApp(ctk.CTk):
             self.focus_set()
             self._render_focus_preview()
 
-    # ------------------------------------------------------------------
-    # Dialoguri personalizate
-    # ------------------------------------------------------------------
-
-    def show_custom_message(self, title: str, message: str, msg_type: str = "info"):
-        dialog = ctk.CTkToplevel(self)
-        dialog.title(title)
-        w, h = 420, 200
-        self.update_idletasks()
-        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
-        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
-        dialog.geometry(f"{w}x{h}+{x}+{y}")
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-
-        color = "#28a745" if msg_type == "info" else "#d9534f"
-        hover = "#218838" if msg_type == "info" else "#c9302c"
-
-        ctk.CTkLabel(dialog, text=title,
-                     font=ctk.CTkFont(size=16, weight="bold"),
-                     text_color=color).pack(pady=(25, 5))
-        ctk.CTkLabel(dialog, text=message,
-                     font=ctk.CTkFont(size=13),
-                     justify="center", wraplength=360).pack(pady=10, padx=20)
-        ctk.CTkButton(dialog, text="Am înțeles", width=120, height=35,
-                      font=ctk.CTkFont(weight="bold"),
-                      fg_color=color, hover_color=hover,
-                      command=dialog.destroy).pack(pady=(10, 20))
-        self.wait_window(dialog)
-
-    def _ask_label_name(self) -> Optional[str]:
-        """Dialog hibrid: Selectează din listă sau scrie text propriu."""
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Etichetă Nouă")
-        w, h = 400, 200
-        self.update_idletasks()
-        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
-        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
-        dialog.geometry(f"{w}x{h}+{x}+{y}")
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-
-        ctk.CTkLabel(dialog, text="Selectați sau introduceți eticheta medicală:", 
-                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(20, 10))
-
-        optiuni = ["Tumoare", "Edem", "Necroză", "Leziune", "Artefact vizual"]
-        combo = ctk.CTkComboBox(dialog, values=optiuni, width=280)
-        combo.pack(pady=10)
-        combo.set(optiuni[0]) # Setăm prima opțiune by default
-
-        result = [None]
-        def on_confirm():
-            if combo.get().strip():
-                result[0] = combo.get().strip()
-                dialog.destroy()
-
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.pack(pady=15)
-        ctk.CTkButton(btn_frame, text="Confirmă", command=on_confirm, width=110, 
-                      fg_color="#28a745", hover_color="#218838").pack(side="left", padx=10)
-        ctk.CTkButton(btn_frame, text="Anulează", command=dialog.destroy, width=110, 
-                      fg_color="gray", hover_color="#555555").pack(side="left", padx=10)
-
-        self.wait_window(dialog)
-        return result[0]
-    def ask_custom_folder_name(self, title: str, prompt: str, initial_value: str) -> Optional[str]:
-        dialog = ctk.CTkToplevel(self)
-        dialog.title(title)
-        w, h = 450, 220
-        self.update_idletasks()
-        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
-        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
-        dialog.geometry(f"{w}x{h}+{x}+{y}")
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-
-        ctk.CTkLabel(dialog, text=prompt,
-                     font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(25, 10), padx=20)
-
-        entry = ctk.CTkEntry(dialog, width=350, height=35, font=ctk.CTkFont(size=14))
-        entry.insert(0, initial_value)
-        entry.pack(pady=10)
-
-        result: List[Optional[str]] = [None]
-
-        def on_submit():
-            result[0] = entry.get()
-            dialog.destroy()
-
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.pack(pady=20)
-        ctk.CTkButton(btn_frame, text="Confirmă", width=120, height=35,
-                      font=ctk.CTkFont(weight="bold"),
-                      command=on_submit).pack(side="left", padx=10)
-        ctk.CTkButton(btn_frame, text="Anulează", width=120, height=35,
-                      fg_color="gray", hover_color="#555555",
-                      command=dialog.destroy).pack(side="left", padx=10)
-
-        self.wait_window(dialog)
-        return result[0]
-
-    # ------------------------------------------------------------------
-    # Acțiuni UI principale
-    # ------------------------------------------------------------------
+    # --- Acțiuni butoane meniu stânga ---
 
     def on_tab_change(self):
         self.reset_session()
@@ -477,19 +351,16 @@ class MorphoApp(ctk.CTk):
             self.btn_save_batch.configure(state="disabled") 
 
             self.display_image(self.backend.get_original_image(), self.canvas_orig)
-            
             self._clear_processed_label()       
             
-            self.status_bar.configure(text="Stare: Imagine nouă încărcată. Sesiunea a fost resetată de la 0.")
+            self.status_bar.configure(text="Stare: Imagine nouă încărcată. Sesiunea a fost resetată.")
         else:
-            self.show_custom_message("Eroare Încărcare",
-                                     "Nu s-a putut citi fișierul selectat.", "error")
+            show_custom_message(self, "Eroare Încărcare", "Nu s-a putut citi fișierul selectat.", "error")
 
     def gui_save_image(self):
         path = filedialog.asksaveasfilename(defaultextension=".png")
         if path and self.backend.save_image(path):
-            self.show_custom_message("Salvare Reușită",
-                                     "Imaginea a fost salvată pe disc.", "info")
+            show_custom_message(self, "Salvare Reușită", "Imaginea a fost salvată pe disc.", "info")
 
     def gui_load_dataset(self):
         folder = filedialog.askdirectory(initialdir="datasets/converted_2d")
@@ -500,7 +371,7 @@ class MorphoApp(ctk.CTk):
 
         ok, info = self.backend.load_batch_from_folder(folder)
         if not ok:
-            self.show_custom_message("Folder Incorect", str(info), "error")
+            show_custom_message(self, "Folder Incorect", str(info), "error")
             return
 
         self.active_batch_folder = folder
@@ -513,9 +384,7 @@ class MorphoApp(ctk.CTk):
             return
 
         sugestie = os.path.basename(path).split(".")[0]
-        name = self.ask_custom_folder_name(
-            "Configurare Export NIfTI",
-            "Introduceți un nume pentru setul 2D rezultat:", sugestie)
+        name = ask_custom_folder_name(self, "Configurare Export", "Introduceți un nume pentru setul 2D rezultat:", sugestie)
         if not name:
             return
 
@@ -529,13 +398,11 @@ class MorphoApp(ctk.CTk):
         if ok:
             self.active_batch_folder = out
             self._init_slider(out)
-            self.status_bar.configure(text="Stare: Pipeline finalizat cu succes. Navigare activă.")
-            self.show_custom_message("Succes Conversie",
-                                     f"Volumul 3D a fost tăiat în {info} felii 2D.", "info")
+            self.status_bar.configure(text="Stare: Finalizat cu succes. Navigare activă.")
+            show_custom_message(self, "Succes Conversie", f"Volumul 3D a fost tăiat în {info} felii 2D.", "info")
         else:
             self.status_bar.configure(text="Stare: Eroare la conversie.")
-            self.show_custom_message("Eroare Critică",
-                                     f"Nu s-a putut converti volumul NIfTI:\n{info}", "error")
+            show_custom_message(self, "Eroare Critică", f"Nu s-a putut converti volumul NIfTI:\n{info}", "error")
 
     def gui_apply_processing(self):
         val_obiectiv = self.operator_dropdown.get()
@@ -545,17 +412,15 @@ class MorphoApp(ctk.CTk):
             self.status_bar.configure(text="Stare: Selectați un filtru valid pentru a-l adăuga în istoric.")
             return
 
-        op_tehnic = self.HARTA_OPERATORI.get(val_obiectiv, "Deschidere")
-        kernel = self.HARTA_INTENSITATE.get(val_intensitate, 3)
+        op_tehnic = HARTA_OPERATORI.get(val_obiectiv, "Deschidere")
+        kernel = HARTA_INTENSITATE.get(val_intensitate, 3)
 
         if self.tabview.get() == "Pipeline Medical" and not self.active_batch_folder:
-            self.show_custom_message("Avertisment",
-                                     "Încărcați un set de date mai întâi.", "error")
+            show_custom_message(self, "Avertisment", "Încărcați un set de date mai întâi.", "error")
             return
 
         if self.tabview.get() == "Single Image" and self.backend.get_original_image() is None:
-            self.show_custom_message("Avertisment",
-                                     "Încărcați o imagine înainte de procesare.", "error")
+            show_custom_message(self, "Avertisment", "Încărcați o imagine înainte de procesare.", "error")
             return
 
         operatie = Operatie(
@@ -579,13 +444,10 @@ class MorphoApp(ctk.CTk):
         if not self.active_batch_folder:
             return
 
-        # Propunem un nume bazat pe numărul de operații din stivă
         ops_text = "_".join(op.nume[:3] for op in self.backend.operation_stack) or "original"
         sugestie = f"{os.path.basename(self.active_batch_folder)}_{ops_text}"
 
-        name = self.ask_custom_folder_name(
-            "Salvare Definitivă",
-            "Introduceți numele directorului de export:", sugestie)
+        name = ask_custom_folder_name(self, "Salvare Definitivă", "Introduceți numele directorului de export:", sugestie)
         if not name:
             return
 
@@ -593,15 +455,11 @@ class MorphoApp(ctk.CTk):
         ok, info = self.backend.save_batch_from_memory(out)
         if ok:
             self.status_bar.configure(text=f"Stare: Lot de {info} imagini salvat.")
-            self.show_custom_message("Lot Salvat",
-                                     f"S-au salvat {info} felii procesate în:\nprocessed_2d/{name}",
-                                     "info")
+            show_custom_message(self, "Lot Salvat", f"S-au salvat {info} felii procesate în:\nprocessed_2d/{name}", "info")
         else:
-            self.show_custom_message("Eroare Salvare", str(info), "error")
+            show_custom_message(self, "Eroare Salvare", str(info), "error")
 
-    # ------------------------------------------------------------------
-    # Navigare felii batch
-    # ------------------------------------------------------------------
+    # --- Navigare imagini multiple ---
 
     def _init_slider(self, folder: str):
         self.slice_files_list = sorted(
@@ -641,12 +499,10 @@ class MorphoApp(ctk.CTk):
         if getattr(self, '_focus_mode', False):
             self._render_focus_preview()
 
-    # ------------------------------------------------------------------
-    # Afișare imagini pe Canvas
-    # ------------------------------------------------------------------
+    # --- Randarea imaginilor ---
 
     def display_image(self, cv_img, target_canvas):
-        """Preia matricea OpenCV, o salvează ca PIL și o randează pe Canvas."""
+        """Conversie din formatul OpenCV în formatul recunoscut de interfață."""
         if cv_img is None:
             return
             
@@ -657,7 +513,6 @@ class MorphoApp(ctk.CTk):
 
         pil_img = Image.fromarray(rgb)
         
-        # Memorăm imaginea brută în funcție de canvas-ul destinație
         if target_canvas == self.canvas_orig:
             self.pil_image_orig = pil_img
         else:
@@ -666,44 +521,38 @@ class MorphoApp(ctk.CTk):
         self._redraw_canvas(target_canvas)
 
     def _redraw_canvas(self, canvas):
-        """Desenează imaginea pe canvas aplicând calculele de Zoom și Panning."""
-        canvas.delete("all")  # Curățăm desenul anterior
+        """Metoda de bază care afișează imaginea respectând zoom-ul și offset-ul curent."""
+        canvas.delete("all")  
         
-        # Alegem sursa corectă
         pil_img = self.pil_image_orig if canvas == self.canvas_orig else self.pil_image_proc
         
-        # Calculăm centrul planșei (aici ne asigurăm că nu e lățime 0 la start)
         w, h = max(canvas.winfo_width(), 400), max(canvas.winfo_height(), 400)
         center_x = (w // 2) + self.pan_x
         center_y = (h // 2) + self.pan_y
 
         if pil_img is None:
-            # Afișăm textul dacă nu există imagine
             text = "Așteptare input..." if canvas == self.canvas_orig else "Așteptare prelucrare..."
             canvas.create_text(w//2, h//2, text=text, fill="gray", font=("Arial", 14))
             return
 
-        # Redimensionare (Image.Resampling.NEAREST e perfect pentru imagini medicale 
-        # fiindcă păstrează contururile clare ale pixelilor originali când dai zoom)
         new_width = int(pil_img.width * self.zoom_scale)
         new_height = int(pil_img.height * self.zoom_scale)
         
         if new_width <= 0 or new_height <= 0:
             return
             
+        # resize-ul se face fără a altera culorile pixelilor vecini
         resized_pil = pil_img.resize((new_width, new_height), Image.Resampling.NEAREST)
         tk_image = ImageTk.PhotoImage(resized_pil)
         
-        # Păstrăm referința pentru Garbage Collector și desenăm!
         canvas.image = tk_image 
         canvas.create_image(center_x, center_y, anchor="center", image=tk_image)
         
-        # --- Randare Bounding Boxes (Label-uri) ---
+        # dacă avem chenare salvate pentru fișierul curent, le redesenăm
         if canvas == self.canvas_proc and self.current_file_name in self.labels_memory:
             img_w = pil_img.width
             img_h = pil_img.height
             
-            # Convertim înapoi pixelii reali în pixeli de ecran (cu Zoom)
             def to_canvas_coord(ix, iy):
                 cx = center_x + (ix - img_w / 2) * self.zoom_scale
                 cy = center_y + (iy - img_h / 2) * self.zoom_scale
@@ -713,25 +562,20 @@ class MorphoApp(ctk.CTk):
                 cx1, cy1 = to_canvas_coord(lbl["x1"], lbl["y1"])
                 cx2, cy2 = to_canvas_coord(lbl["x2"], lbl["y2"])
                 
-                # Culoarea standard în industrie (verde electric/neon)
                 color = "#00ff00"
-                
-                # Desenăm chenarul
                 canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=color, width=2)
                 
-                # Desenăm un fundal pentru text ca să fie lizibil pe raze RMN
                 text_len = len(lbl["nume"]) * 9
                 canvas.create_rectangle(cx1, cy1 - 22, cx1 + text_len + 15, cy1, fill=color, outline=color)
                 canvas.create_text(cx1 + 5, cy1 - 11, text=lbl["nume"], fill="black", anchor="w", font=("Arial", 11, "bold"))
     
     def _clear_canvas(self, canvas):
-        """Golește canvas-ul complet, readucând starea la zero."""
+        """Golește ecranul și resetează zoom-ul la zero."""
         if canvas == self.canvas_orig:
             self.pil_image_orig = None
         else:
             self.pil_image_proc = None
             
-        # Resetăm zoom-ul la normal când se șterge imaginea
         self.zoom_scale = 1.0
         self.pan_x = 0
         self.pan_y = 0
@@ -741,16 +585,13 @@ class MorphoApp(ctk.CTk):
         self._clear_canvas(self.canvas_proc)
 
     def _refresh_processed_display(self):
-        """Actualizează panoul cu rezultatul procesării (mod Single Image)."""
         img = self.backend.get_processed_image()
         if img is not None:
             self.display_image(img, self.canvas_proc)
         else:
             self._clear_processed_label()
 
-    # ------------------------------------------------------------------
-    # Timeline sesiune
-    # ------------------------------------------------------------------
+    # --- Desenare meniu de istoric (dreapta) ---
 
     def render_session_timeline(self):
         for w in self.session_scrollable_frame.winfo_children():
@@ -777,9 +618,7 @@ class MorphoApp(ctk.CTk):
                           command=lambda i=index: self._delete_operation(i)).pack(
                 side="right", padx=5, pady=8)
 
-    # ------------------------------------------------------------------
-    # Drag & Drop
-    # ------------------------------------------------------------------
+    # --- Logica de drag and drop filtre ---
 
     def _on_drag_start(self, event, index: int):
         self._drag_start_y = event.y_root
@@ -787,49 +626,41 @@ class MorphoApp(ctk.CTk):
 
     def _on_drag_release(self, event, start_index: int):
         delta_y = event.y_root - self._drag_start_y
-        shift = round(delta_y / 40)  # ~40px per rând
+        shift = round(delta_y / 40)  # calculăm cate rânduri am sărit (aprox 40px un rând)
 
         if shift != 0:
             moved = self.backend.muta_operatie(start_index, start_index + shift)
             if moved:
                 self.render_session_timeline()
                 self._update_display_after_stack_change()
-    # ------------------------------------------------------------------
-    # Interacțiune pe Canvas (Zoom & Panning)
-    # ------------------------------------------------------------------
+
+    # --- Logica de zoom, drag imagine și desenare chenare ---
 
     def _on_zoom(self, event):
         if event.delta > 0:
-            self.zoom_scale *= 1.15  # Zoom In 15%
+            self.zoom_scale *= 1.15
         elif event.delta < 0:
-            self.zoom_scale /= 1.15  # Zoom Out 15%
+            self.zoom_scale /= 1.15 
         
-        # Limităm zoom-ul între 10% și 1000%
         self.zoom_scale = max(0.1, min(self.zoom_scale, 10.0))
-        
-        # Redesenăm pe ecran ambele imagini
         self._redraw_canvas(self.canvas_orig)
         self._redraw_canvas(self.canvas_proc)
 
     def _on_pan_start(self, event):
-        # Dacă suntem pe planșa procesată și modul desen e activat
         if event.widget == self.canvas_proc and self.is_drawing_mode:
             self._draw_start_x = event.x
             self._draw_start_y = event.y
             
-            # Creăm un dreptunghi roșu temporar (inițial de dimensiune 0)
             self.temp_rect_id = self.canvas_proc.create_rectangle(
                 self._draw_start_x, self._draw_start_y, event.x, event.y,
                 outline="red", width=2, dash=(4, 2)
             )
         else:
-            # Panning normal
             self._pan_start_x = event.x
             self._pan_start_y = event.y
 
     def _on_pan_drag(self, event):
         if event.widget == self.canvas_proc and self.is_drawing_mode:
-            # Actualizăm coordonatele dreptunghiului roșu pe măsură ce tragem de mouse
             if self.temp_rect_id:
                 self.canvas_proc.coords(
                     self.temp_rect_id,
@@ -837,7 +668,6 @@ class MorphoApp(ctk.CTk):
                     event.x, event.y
                 )
         else:
-            # Panning normal
             dx = event.x - self._pan_start_x
             dy = event.y - self._pan_start_y
             self.pan_x += dx
@@ -846,6 +676,7 @@ class MorphoApp(ctk.CTk):
             self._pan_start_y = event.y
             self._redraw_canvas(self.canvas_orig)
             self._redraw_canvas(self.canvas_proc)
+
     def _on_mouse_release(self, event):
         if event.widget == self.canvas_proc and self.is_drawing_mode:
             self.is_drawing_mode = False
@@ -857,10 +688,8 @@ class MorphoApp(ctk.CTk):
                 self.status_bar.configure(text="Stare: Chenar prea mic. Desenare anulată.")
                 return
 
-            # 1. Cerem eticheta (se deschide dialogul creat mai sus)
-            label_name = self._ask_label_name()
+            label_name = ask_label_name(self)
             
-            # Ștergem chenarul temporar (îl vom redesena permanent)
             if self.temp_rect_id:
                 self.canvas_proc.delete(self.temp_rect_id)
 
@@ -868,7 +697,7 @@ class MorphoApp(ctk.CTk):
                 self.status_bar.configure(text="Stare: Adăugare etichetă anulată.")
                 return
 
-            # 2. Conversie matematică: Canvas (ce vezi) -> Imaginea Sursă (pixeli reali)
+            # transformăm coordonatele de ecran în coordonatele reale ale imaginii pentru a nu depinde de zoom
             w = max(self.canvas_proc.winfo_width(), 400)
             h = max(self.canvas_proc.winfo_height(), 400)
             center_x = (w // 2) + self.pan_x
@@ -877,7 +706,6 @@ class MorphoApp(ctk.CTk):
             img_w = self.pil_image_proc.width
             img_h = self.pil_image_proc.height
 
-            # Formula de transformare
             def to_img_coord(cx, cy):
                 ix = (cx - center_x) / self.zoom_scale + img_w / 2
                 iy = (cy - center_y) / self.zoom_scale + img_h / 2
@@ -886,13 +714,11 @@ class MorphoApp(ctk.CTk):
             ix1, iy1 = to_img_coord(self._draw_start_x, self._draw_start_y)
             ix2, iy2 = to_img_coord(event.x, event.y)
 
-            # Ne asigurăm că punctele nu ies din marginea imaginii
             real_x1 = max(0, min(ix1, ix2, img_w))
             real_y1 = max(0, min(iy1, iy2, img_h))
             real_x2 = min(img_w, max(ix1, ix2, 0))
             real_y2 = min(img_h, max(iy1, iy2, 0))
 
-            # 3. Salvăm în memoria dicționarului
             if self.current_file_name not in self.labels_memory:
                 self.labels_memory[self.current_file_name] = []
             
@@ -903,14 +729,9 @@ class MorphoApp(ctk.CTk):
             })
 
             self.status_bar.configure(text=f"Stare: Label '{label_name}' salvat în memorie.")
-            
-            # 4. Forțăm ecranul să se redeseneze pentru a afișa rezultatul
             self._redraw_canvas(self.canvas_proc)
             
-
-    # ------------------------------------------------------------------
-    # Operații pe stivă (acționate din UI)
-    # ------------------------------------------------------------------
+    # --- Editare istoric stivă ---
 
     def _delete_operation(self, index: int):
         if self.backend.sterge_operatie(index):
@@ -924,17 +745,15 @@ class MorphoApp(ctk.CTk):
             self.status_bar.configure(text="Stare: Ultima operație anulată.")
 
     def reset_session(self):
-        # 1. Resetăm stiva de operatori
+        # curățăm memoria ca să nu se suprapună filtrele vechi pe datele noi
         self.backend.reset()
-        
-        # 2. Golire completă din memorie
         self.backend.image_original = None
         self.backend.image_processed = None
         self.backend.base_data = {}
         self.backend.batch_cache = {}
         self.labels_memory = {}
         self.current_file_name = "imagine_unica"
-        # 3. Resetare elemente de navigare UI
+        
         self.active_batch_folder = None
         self.slice_files_list = []
         self.nav_frame.grid_remove()
@@ -943,32 +762,26 @@ class MorphoApp(ctk.CTk):
         self._clear_canvas(self.canvas_orig)
         self._clear_canvas(self.canvas_proc)
 
-        # 4. Re-randăm UI-ul
         self.render_session_timeline()
-        self.status_bar.configure(text="Stare: Sesiune resetată.")
+        self.status_bar.configure(text="Stare: Sesiune resetată complet.")
 
     def _update_display_after_stack_change(self):
-        """Punct unic de actualizare a imaginilor după orice modificare a stivei."""
+        """Forțează redesenarea imaginilor pe ecran dacă s-a modificat ceva în stivă."""
         if self.tabview.get() == "Pipeline Medical" and self.slice_files_list:
             self.on_slice_slider_move(self.slice_slider.get())
         else:
             self._refresh_processed_display()
 
-    # ------------------------------------------------------------------
-    # Funcționalitate Adnotări (Labeling)
-    # ------------------------------------------------------------------
+    # --- Click dreapta și export ---
 
     def _show_context_menu(self, event):
-        """Construiește meniul dinamic și verifică dacă am dat click pe un label existent."""
         if self.pil_image_proc is not None:
-            # 1. Golim meniul vechi
             self.context_menu.delete(0, 'end')
             
-            # 2. Adăugăm opțiunile standard
             self.context_menu.add_command(label="➕ Adaugă Label...", command=self._activate_drawing_mode)
             self.context_menu.add_command(label="🗑 Șterge toate Label-urile", command=self._clear_current_labels)
             
-            # 3. Calculăm coordonatele reale ale click-ului pe imagine
+            # logica matematică pentru a vedea dacă am dat click pe un chenar anume
             w = max(self.canvas_proc.winfo_width(), 400)
             h = max(self.canvas_proc.winfo_height(), 400)
             center_x = (w // 2) + self.pan_x
@@ -979,24 +792,20 @@ class MorphoApp(ctk.CTk):
             ix = (event.x - center_x) / self.zoom_scale + img_w / 2
             iy = (event.y - center_y) / self.zoom_scale + img_h / 2
             
-            # 4. Verificăm dacă click-ul a picat în interiorul unui label existent
             labels = self.labels_memory.get(self.current_file_name, [])
             clicked_idx = -1
             clicked_name = ""
             
-            # Căutăm invers (pentru a selecta ultimul label desenat dacă se suprapun)
             for i in range(len(labels) - 1, -1, -1):
                 lbl = labels[i]
                 min_x, max_x = min(lbl["x1"], lbl["x2"]), max(lbl["x1"], lbl["x2"])
                 min_y, max_y = min(lbl["y1"], lbl["y2"]), max(lbl["y1"], lbl["y2"])
                 
-                # Dacă coordonatele mouse-ului sunt în interiorul chenarului
                 if min_x <= ix <= max_x and min_y <= iy <= max_y:
                     clicked_idx = i
                     clicked_name = lbl["nume"]
                     break
                     
-            # 5. Dacă am găsit un label, adăugăm butonul special de ștergere individuală
             if clicked_idx != -1:
                 self.context_menu.add_separator()
                 self.context_menu.add_command(
@@ -1004,45 +813,39 @@ class MorphoApp(ctk.CTk):
                     command=lambda idx=clicked_idx: self._delete_single_label(idx)
                 )
 
-            # 6. Adăugăm opțiunea de salvare la final
             self.context_menu.add_separator()
             self.context_menu.add_command(label="💾 Salvează imaginea", command=self._save_slice_with_labels)
 
-            # 7. Afișăm meniul pe ecran
             self.context_menu.tk_popup(event.x_root, event.y_root)
 
     def _activate_drawing_mode(self):
-        """Pornește modul de desenare după click pe meniul contextual."""
         if self.pil_image_proc is not None:
             self.is_drawing_mode = True
             self.canvas_proc.configure(cursor="crosshair")
             self.status_bar.configure(text="Stare: Mod desenare activat. Trageți cu click-stânga pentru a crea un chenar.")
         
     def _clear_current_labels(self):
-        """Șterge toate adnotările de pe imaginea curentă."""
         if self.current_file_name in self.labels_memory:
             self.labels_memory[self.current_file_name] = []
             self._redraw_canvas(self.canvas_proc)
             self.status_bar.configure(text=f"Stare: Toate etichetele au fost șterse.")
 
     def _delete_single_label(self, idx: int):
-        """Șterge un singur label de pe imaginea curentă bazat pe index."""
         labels = self.labels_memory.get(self.current_file_name, [])
         if 0 <= idx < len(labels):
             nume = labels[idx]["nume"]
-            del labels[idx]  # Ștergem din listă
-            self._redraw_canvas(self.canvas_proc)  # Re-randăm ecranul
+            del labels[idx]  
+            self._redraw_canvas(self.canvas_proc)  
             self.status_bar.configure(text=f"Stare: Label-ul '{nume}' a fost șters.")
 
     def _save_slice_with_labels(self):
-        """Salvează felia curentă cu adnotările aplicate definitiv via OpenCV."""
         if not self.pil_image_proc:
-            self.show_custom_message("Eroare", "Nu există o imagine procesată pentru a fi salvată.", "error")
+            show_custom_message(self, "Eroare", "Nu există o imagine procesată pentru a fi salvată.", "error")
             return
 
         labels = self.labels_memory.get(self.current_file_name, [])
         if not labels:
-            self.show_custom_message("Info", "Nu există etichete pe această imagine. Folosiți butonul standard de salvare.", "info")
+            show_custom_message(self, "Info", "Nu există etichete pe această imagine. Folosiți butonul standard de salvare.", "info")
             return
 
         if self.current_file_name == "imagine_unica":
@@ -1051,9 +854,10 @@ class MorphoApp(ctk.CTk):
             base_img = self.backend.batch_cache.get(self.current_file_name)
 
         if base_img is None:
-            self.show_custom_message("Eroare", "Nu s-au putut prelua datele din backend.", "error")
+            show_custom_message(self, "Eroare", "Nu s-au putut prelua datele din backend.", "error")
             return
 
+        # trebuie să o trecem în BGR ca să putem desena colorat peste ea din OpenCV
         if base_img.ndim == 2:
             export_img = cv2.cvtColor(base_img, cv2.COLOR_GRAY2BGR)
         else:
@@ -1063,10 +867,9 @@ class MorphoApp(ctk.CTk):
             x1, y1, x2, y2 = lbl["x1"], lbl["y1"], lbl["x2"], lbl["y2"]
             nume = lbl["nume"]
 
-            color = (0, 255, 0) # verde neon
+            color = (0, 255, 0) 
             thickness = 2
 
-            # Desenăm chenarul principal
             cv2.rectangle(export_img, (x1, y1), (x2, y2), color, thickness)
 
             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -1078,7 +881,6 @@ class MorphoApp(ctk.CTk):
             cv2.rectangle(export_img, (x1, y1 - text_h - 10), (x1 + text_w + 10, y1), color, -1)
             cv2.putText(export_img, nume, (x1 + 5, y1 - 5), font, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
-        # Solicitare locatie de salvare a imaginii
         sugestie = f"adnotat_{self.current_file_name}" if self.current_file_name != "imagine_unica" else "imagine_adnotata.png"
         path = filedialog.asksaveasfilename(
             initialfile=sugestie,
@@ -1086,22 +888,19 @@ class MorphoApp(ctk.CTk):
             filetypes=[("PNG Image", "*.png")]
         )
 
-        # Salvare pe disc
         if path:
             cv2.imwrite(path, export_img)
-            self.show_custom_message("Salvare Reușită", f"Imaginea adnotată a fost salvată:\n{os.path.basename(path)}", "info")
+            show_custom_message(self, "Salvare Reușită", f"Imaginea adnotată a fost salvată:\n{os.path.basename(path)}", "info")
             self.status_bar.configure(text="Stare: Imagine adnotată salvată cu succes.")
 
-    # ------------------------------------------------------------------
-    # Navigare Tastatură și Live Preview (Mod Focus)
-    # ------------------------------------------------------------------
+    # --- Previzualizare Rapidă din Tastatură ---
 
     def _update_focus_labels(self):
-        self.lbl_focus_op.configure(text=f"←  {self._op_keys[self._focus_op_idx]}  →")
-        self.lbl_focus_int.configure(text=f"↓  {self._int_keys[self._focus_int_idx]}  ↑")
+        self.lbl_focus_op.configure(text=f"<  {self._op_keys[self._focus_op_idx]}  >")
+        self.lbl_focus_int.configure(text=f"v  {self._int_keys[self._focus_int_idx]}  ^")
 
     def _get_current_base_image_for_preview(self):
-        """Aduce imaginea de bază peste care vom aplica filtrul temporar."""
+        """Aduce imaginea de bază peste care vom arunca filtrul temporar de previzualizare."""
         if self.current_file_name == "imagine_unica":
             img = self.backend.get_processed_image()
             return img if img is not None else self.backend.get_original_image()
@@ -1110,7 +909,7 @@ class MorphoApp(ctk.CTk):
             return img if img is not None else self.backend.base_data.get(self.current_file_name)
 
     def _render_focus_preview(self):
-        """Aplică filtrul curent doar vizual, fără a-l salva în memorie."""
+        """Execută calculele doar pentru a le afișa pe ecran, fără să salveze nimic oficial."""
         base_img = self._get_current_base_image_for_preview()
         if base_img is None:
             return
@@ -1118,17 +917,14 @@ class MorphoApp(ctk.CTk):
         op_clinic = self._op_keys[self._focus_op_idx]
         int_clinic = self._int_keys[self._focus_int_idx]
 
-        # Dacă e pe "Fără Filtru" sau utilizatorul ține apăsat SPACE
         if op_clinic == "Fără Filtru" or self._is_space_pressed:
             self.display_image(base_img, self.canvas_proc)
         else:
-            op_tehnic = self.HARTA_OPERATORI[op_clinic]
-            k_size = self.HARTA_INTENSITATE[int_clinic]
-            # Calculăm și afișăm doar temporar (folosim .copy() ca să nu murdărim originalul)
+            op_tehnic = HARTA_OPERATORI[op_clinic]
+            k_size = HARTA_INTENSITATE[int_clinic]
+            
             preview_img = MorphoBackend._aplica_filtru(base_img.copy(), op_tehnic, k_size)
             self.display_image(preview_img, self.canvas_proc)
-
-    # --- Handlere Taste ---
 
     def _on_key_up(self, event):
         if not self._focus_mode: return
@@ -1157,12 +953,12 @@ class MorphoApp(ctk.CTk):
     def _on_space_press(self, event):
         if not self._focus_mode or self._is_space_pressed: return
         self._is_space_pressed = True
-        self._render_focus_preview()  # Afișează originalul
+        self._render_focus_preview()  
 
     def _on_space_release(self, event):
         if not self._focus_mode: return
         self._is_space_pressed = False
-        self._render_focus_preview()  # Revine la preview-ul filtrului
+        self._render_focus_preview()  
 
     def _on_key_enter(self, event):
         if not self._focus_mode: return
@@ -1173,14 +969,12 @@ class MorphoApp(ctk.CTk):
             return
             
         int_clinic = self._int_keys[self._focus_int_idx]
-        op_tehnic = self.HARTA_OPERATORI[op_clinic]
-        kernel = self.HARTA_INTENSITATE[int_clinic]
+        op_tehnic = HARTA_OPERATORI[op_clinic]
+        kernel = HARTA_INTENSITATE[int_clinic]
         
-        # Trimitem operația către backend pentru procesare definitivă
         operatie = Operatie(nume_clinic=op_clinic, intensitate_text=int_clinic, nume=op_tehnic, kernel=kernel)
         self.backend.adauga_operatie(operatie)
         
         self.render_session_timeline()
         self.status_bar.configure(text=f"Stare: Filtrul '{op_clinic}' a fost aplicat definitiv.")
-        # După aplicare, re-randăm preview-ul peste noul strat de bază creat
         self._render_focus_preview()

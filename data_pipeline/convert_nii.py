@@ -1,18 +1,14 @@
 """
-MorfoMed – Convertor standalone NIfTI → PNG
-Folosit pentru conversii batch din linia de comandă, fără UI.
-Deleghează logica de procesare către MorphoBackend pentru a evita duplicarea.
+ Convertor NIfTI → PNG
 """
 
 import os
 import sys
 import argparse
 
-# Adăugăm directorul scriptului în sys.path pentru a găsi backend-ul
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend_morph import MorphoBackend
-
+from core.backend_morph import MorphoBackend
 
 def main():
     parser = argparse.ArgumentParser(
@@ -20,8 +16,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemple de utilizare:
-  python convert_nii.py fisier.nii
-  python convert_nii.py fisier.nii.gz --output datasets/converted_2d/pacient_01
+  python data_pipeline/convert_nii.py fisier.nii
+  python data_pipeline/convert_nii.py fisier.nii.gz --output datasets/converted_2d/pacient_01
         """
     )
     parser.add_argument("input", help="Calea către fișierul .nii sau .nii.gz")
@@ -40,7 +36,6 @@ Exemple de utilizare:
     if args.output:
         output_folder = os.path.abspath(args.output)
     else:
-        # Generăm automat un nume din fișierul de intrare
         base_name = os.path.basename(nii_path).split(".")[0]
         output_folder = os.path.abspath(
             os.path.join("datasets", "converted_2d", base_name))
@@ -57,7 +52,6 @@ Exemple de utilizare:
     else:
         print(f"[EROARE] Conversia a eșuat: {info}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

@@ -1,40 +1,16 @@
 """
-MorfoMed – Backend
+Backend
 Responsabil exclusiv pentru logica de procesare a imaginilor.
-Nu conține nicio dependință de UI.
 """
 
 import os
 import cv2
 import numpy as np
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
+# Importăm modelul de date creat la Pasul 1
+from core.models import Operatie
 
-# ---------------------------------------------------------------------------
-# Structura de date pentru o operație din pipeline
-# ---------------------------------------------------------------------------
-
-@dataclass
-class Operatie:
-    """Reprezintă un pas din pipeline-ul morfologic."""
-    nume_clinic: str        # Etichetă prietenoasă pentru UI
-    intensitate_text: str   # "Fină" / "Medie" / "Puternică"
-    nume: str               # Operator OpenCV intern
-    kernel: int             # Dimensiunea kernelului (impară)
-
-    def to_dict(self) -> dict:
-        return {
-            "nume_clinic": self.nume_clinic,
-            "intensitate_text": self.intensitate_text,
-            "nume": self.nume,
-            "kernel": self.kernel,
-        }
-
-
-# ---------------------------------------------------------------------------
-# Backend principal
-# ---------------------------------------------------------------------------
 
 class MorphoBackend:
 
@@ -237,7 +213,6 @@ class MorphoBackend:
     @staticmethod
     def _aplica_filtru(img: np.ndarray, operator: str, k_size: int) -> np.ndarray:
         """Aplică un singur operator morfologic pe o imagine."""
-        # Kernelul trebuie să fie impar
         if k_size % 2 == 0:
             k_size += 1
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_size, k_size))
@@ -254,5 +229,5 @@ class MorphoBackend:
 
         func = operatori.get(operator)
         if func is None:
-            return img  # operator necunoscut → returnăm imaginea neschimbată
+            return img
         return func(img, kernel)

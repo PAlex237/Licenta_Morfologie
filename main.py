@@ -1,7 +1,5 @@
-
-
-from frontend_gui import MorphoApp
+from gui.app import MainApp
 
 if __name__ == "__main__":
-    app = MorphoApp()
+    app = MainApp()
     app.mainloop()
