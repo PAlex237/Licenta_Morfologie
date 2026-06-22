@@ -341,17 +341,20 @@ class MorphoApp(ctk.CTk):
         if not path:
             return
 
+        self.backend.reset()                
+        self.render_session_timeline()     
+  
         if self.backend.load_image(path):
-            self.nav_frame.grid_remove()          # Ascundem slider-ul
-            self.slice_files_list = []            # Golim lista de felii
-            self.active_batch_folder = None       # Anulăm folderul activ
-            self.btn_save_batch.configure(state="disabled") # Dezactivăm salvarea lotului
-            # ------------------------------------------------------------
+            self.nav_frame.grid_remove()          
+            self.slice_files_list = []            
+            self.active_batch_folder = None       
+            self.btn_save_batch.configure(state="disabled") 
 
             self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
-            # Recalculăm pipeline-ul pe noua imagine (stiva rămâne)
-            self._refresh_processed_display()
-            self.status_bar.configure(text="Stare: Imagine nouă încărcată.")
+            
+            self._clear_processed_label()       
+            
+            self.status_bar.configure(text="Stare: Imagine nouă încărcată. Sesiunea a fost resetată de la 0.")
         else:
             self.show_custom_message("Eroare Încărcare",
                                      "Nu s-a putut citi fișierul selectat.", "error")
