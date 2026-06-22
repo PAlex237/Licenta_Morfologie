@@ -386,13 +386,13 @@ class MorphoApp(ctk.CTk):
         if not folder:
             return
 
+        self.reset_session()
+
         ok, info = self.backend.load_batch_from_folder(folder)
         if not ok:
             self.show_custom_message("Folder Incorect", str(info), "error")
             return
 
-        self.backend.operation_stack.clear()
-        self.render_session_timeline()
         self.active_batch_folder = folder
         self._init_slider(folder)
         self.status_bar.configure(text=f"Stare: Set date încărcat '{os.path.basename(folder)}'.")
@@ -413,9 +413,10 @@ class MorphoApp(ctk.CTk):
         self.status_bar.configure(text="Stare: Inițializare decodificare volum NIfTI...")
         self.update_idletasks()
 
+        self.reset_session()
+
         ok, info = self.backend.convert_nii_volume(path, out)
         if ok:
-            self.reset_session()
             self.active_batch_folder = out
             self._init_slider(out)
             self.status_bar.configure(text="Stare: Pipeline finalizat cu succes. Navigare activă.")
