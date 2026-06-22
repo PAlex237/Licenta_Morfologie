@@ -1,90 +1,84 @@
-# Morfomed – Sistem de Procesare și Analiză Morfologică pentru Imagistică Medicală 3D
+# Sistem de Procesare și Analiză Morfologică pentru Imagistică Medicală 3D
 
-Morfomed este o aplicație desktop avansată dezvoltată în Python, concepută pentru vizualizarea, decodificarea și procesarea volumelor de date medicale 3D (în format NIfTI) utilizând tehnici fundamentale de **Morfologie Matematică**. Proiectul este optimizat pentru preprocesarea imaginilor obținute prin Rezonanță Magnetică (RMN / MRI), oferind suport critic în izolarea structurilor anatomice complexe și facilitarea segmentării formațiunilor tumorale.
+O aplicație desktop avansată, dezvoltată în Python, concepută pentru vizualizarea, decodificarea și procesarea volumelor de date medicale 3D (în format NIfTI) utilizând tehnici fundamentale și avansate de **Morfologie Matematică**. 
 
-Aplicația este structurată pe o arhitectură decuplată de tip **Backend-Frontend**, asigurând o viteză ridicată de procesare prin utilizarea unui cache direct în memoria RAM a sistemului (In-Memory Processing Pipeline) pentru loturile mari de cadre axiale.
+Proiectul este optimizat pentru preprocesarea imaginilor obținute prin Rezonanță Magnetică (RMN / MRI), oferind suport critic în izolarea structurilor anatomice complexe, reducerea zgomotului de fond și facilitarea segmentării formațiunilor tumorale. Aplicația utilizează o arhitectură modulară decuplată (Core-GUI), asigurând o viteză ridicată de procesare prin mecanisme de caching direct în memoria RAM (In-Memory Processing).
+
+![Interfața Principală](assets/main_interface.png)
+*(Adaugă aici o captură de ecran cu interfața principală a aplicației)*
 
 ---
 
 ## 🚀 Caracteristici Principale
 
-### 1. Pipeline Volumetric 3D (Mod Segmentare/Lot)
-* **Decodificare NIfTI (.nii, .nii.gz):** Extracția automată a cadrelor axiale 2D din volume medicale tridimensionale (ex: seturi de date oncologice/neurologice tip BraTS).
-* **Procesare Secvențială în RAM:** Execuția operatorilor morfologici direct pe întregul lot de imagini din memorie, eliminând latențele de scriere/citire pe disc în timpul fazei de ajustare.
-* **Sistem Premium de Navigare:** Slider interactiv pentru parcurgerea cadrelor anatomice în timp real cu sincronizare instantanee a rezultatelor procesate (Preview RAM).
-* **Management de Persistență:** Exportul loturilor procesate în structuri organizate de directoare (`datasets/processed_2d/`).
+### 1. Vizualizare și Procesare Volumetrică (Batch Processing)
+* **Decodificare NIfTI (.nii, .nii.gz):** Extracția automată a cadrelor axiale 2D din volume medicale tridimensionale (ex: seturi de date oncologice/neurologice).
+* **Procesare Secvențială în RAM:** Execuția operatorilor direct pe lotul de imagini din memorie, eliminând latențele de scriere/citire pe disc.
+* **Sistem de Navigare Sincronizată:** Slider interactiv pentru parcurgerea cadrelor anatomice cu actualizarea instantanee a previzualizării procesate.
 
-### 2. Procesare Cadru 2D (Mod Individual)
-* Încărcarea independentă a imaginilor grayscale/binare.
-* Aplicarea individuală a algoritmilor și salvarea rapidă a rezultatului editat.
+### 2. Mod Focus & Live Preview (Accelerare UI)
+* **Navigare din Tastatură:** Posibilitatea de a schimba operatorii (Stânga/Dreapta) și intensitățile (Sus/Jos) direct din săgeți.
+* **Procesare "Din Zbor":** Aplicația randează rezultatul vizual instantaneu, fără a încărca stiva de memorie, permițând o explorare rapidă a filtrelor.
+* **Modul "Hold to Compare":** Funcționalitate avansată la apăsarea tastei `SPACE` pentru comutarea rapidă între imaginea originală și previzualizarea filtrului curent.
 
-### 3. Operatori Morfologici Implementați
-* **Eroziune & Dilatare:** Operatori fundamentali pentru reducerea zgomotului de fond sau extinderea regiunilor de interes.
-* **Deschidere (Opening) & Închidere (Closing):** Eliminarea artefactelor izolate și umplerea golurilor structurale interne.
-* **Top-Hat & Black-Hat:** Extracția elementelor luminoase sau întunecate pe fundaluri neuniforme (corecție de iluminare/contrast medical).
-* **Kernel Ajustabil:** Suport pentru elemente structurante (S.E.) cu dimensiuni dinamice impare (de la 3x3 până la 15x15).
+![Mod Focus](assets/focus_mode.png)
+*(Adaugă aici o captură de ecran cu modul focus activat)*
+
+### 3. Sistem Avansat de Adnotare Medicală (Labeling)
+* **Bounding Boxes:** Desenare interactivă de chenare direct pe planșa procesată (cu transformări matematice precise la Zoom/Pan).
+* **Meniu Contextual Dinamic:** Identificarea chenarelor la click-dreapta pentru ștergere individuală sau adăugare de noi etichete medicale.
+* **Export cu Overlay:** Salvarea cadrelor de interes cu adnotările și textul suprapuse direct pe matricea de pixeli, utile pentru rapoarte clinice.
+
+![Sistem Adnotare](assets/labeling.png)
+*(Adaugă aici o captură de ecran cu meniul contextual și un chenar desenat)*
+
+### 4. Istoric de Operații (Stacking Pipeline)
+* Construirea de pipeline-uri complexe (ex: Deschidere → Eroziune → Top-Hat).
+* Reordonarea filtrelor prin **Drag & Drop** cu recalcularea automată a rezultatului vizual.
+* Suport integrat pentru `Undo` și resetare de sesiune.
 
 ---
 
-## 🛠️ Tehnologii Utilizate
+## 🔬 Operatori Morfologici Implementați
 
-* **Limbaj de programare:** Python 3.9+
-* **Interfață Grafică (GUI):** `customtkinter` (Arhitectură modernă Dark Mode cu suport nativ pentru afișaje HighDPI).
-* **Procesare de Imagine & Vision:** `OpenCV` (suport matematic de înaltă performanță) și `Pillow` (PIL).
-* **Manipulare Date Medicale:** `NiBabel` (pentru parsarea și citirea corectă a metadatelor și voxelilor din fișierele `.nii`/`.nii.gz`).
+* **Eroziune & Dilatare:** Operatori fundamentali pentru subțierea sau expandarea regiunilor de interes.
+* **Deschidere & Închidere:** Eliminarea artefactelor izolate și umplerea golurilor structurale interne fără a afecta aria globală.
+* **Top-Hat & Black-Hat:** Extracția elementelor luminoase/întunecate, excelentă pentru corecția de contrast pe fonduri neuniforme.
+* **Gradient Morfologic:** Conturarea precisă a marginilor tumorale sau ale structurilor osoase.
+* **Kernel Ajustabil:** Suport pentru elemente structurante pătratice dinamice (dimensiuni impare 3x3, 5x5, 7x7).
 
 ---
 
-## 📂 Structura Proiectului
+## 🛠️ Tehnologii și Arhitectură
 
-Licenta-Morfologie/
+Aplicația respectă principiile *Separation of Concerns*, având logica algoritmică strict separată de interfața grafică.
+
+* **Limbaj:** Python 3.9+
+* **Interfață Grafică (GUI):** `customtkinter` (Dark Mode, hardware acceleration, HighDPI support).
+* **Procesare Matematică & Vision:** `OpenCV` (CV2) și `NumPy` pentru calcule de înaltă performanță pe matrice.
+* **Manipulare și Randare Imagine:** `Pillow` (PIL) pentru adaptarea matricelor la UI cu resampling `NEAREST` pentru menținerea fidelității clinice la zoom.
+* **Date Medicale:** `NiBabel` pentru parsarea voxelilor din fișiere `.nii`/`.nii.gz`.
+
+### Structura Proiectului
+```text
+Licenta_Morfologie/
 │
 ├── main.py                  # Punctul de intrare (Entry-point) în aplicație
-├── frontend_gui.py          # Implementarea interfeței grafice și gestionarea stărilor (CustomTkinter)
-├── backend_morph.py         # Nucleul algoritmic (Algoritmi morfologici, parsare NIfTI, RAM caching)
+├── core/                    # Logica de business și date (Backend)
+│   ├── backend_morph.py     # Algoritmi morfologici, parsare NIfTI, RAM caching
+│   └── models.py            # Structuri de date (ex: definiția operațiilor)
 │
-├── datasets/                # Structura standardizată pentru stocarea datelor
-│   ├── converted_2d/        # Cadrele 2D extrase în urma decodificării volumelor .nii
-│   └── processed_2d/        # Seturile de date salvate definitiv după aplicarea filtrelor
+├── gui/                     # Interfața Grafică (Frontend)
+│   ├── app.py               # Fereastra principală, randare canvas, evenimente
+│   ├── config.py            # Hărți clinice, setări constante
+│   └── dialogs.py           # Pop-up-uri și input-uri personalizate
 │
-└── requirements.txt         # Dependențele și bibliotecile externe necesare
-
----
-
-## ⚙️ Instalare și Configurare
-
-### 1. Clonarea repository-ului
-git clone <url-repository>
-cd Licenta-Morfologie
-
-### 2. Instalarea dependențelor
-Asigurați-vă că aveți un mediu virtual activat, apoi rulați:
-pip install -r requirements.txt
-
-*Notă: Fișierul requirements.txt trebuie să conțină cel puțin:*
-customtkinter
-opencv-python
-pillow
-nibabel
-
-### 3. Lansarea aplicației
-python main.py
-
----
-
-## 📖 Ghid de Utilizare Academică
-
-### Modul Pipeline Volumetric 3D (Recomandat pentru Volume RMN)
-1. Selectați tab-ul **Pipeline Volumetric 3D** din meniul lateral stâng.
-2. Apăsați **Conversie Nouă (.nii)** și selectați un volum medical de pe disc.
-3. Introduceți un identificator unic pentru setul de date. Aplicația va decodifica volumul și va inițializa slider-ul de navigare axială.
-4. Ajustați **Setările de Procesare** (Tipul operatorului și dimensiunea kernelului).
-5. Apăsați **PREVIZUALIZEAZĂ LOT** pentru a executa procesarea în cache-ul RAM.
-6. Navigați prin felii folosind slider-ul inferior pentru a valida vizual rezultatul preprocesării.
-7. Dacă rezultatul este optim, apăsați **SALVEAZĂ LOTUL** pentru a scrie rezultatele pe disc.
-
----
-
-## 🧑‍💻 Autor
-* **Alex-Mario Pop** – Student, Facultatea de Matematică și Informatică, Universitatea de Vest din Timișoara (UVT).
-* Proiect dezvoltat ca aplicație practică în cadrul lucrării de licență axată pe preprocesarea și morfologia matematică aplicată pe imagini medicale.
+├── data_pipeline/           # Scripturi utilitare
+│   └── convert_nii.py       # Convertor standalone CLI pentru volume 3D
+│
+├── datasets/                # Stocare (ignorat în versionare)
+│   ├── raw_3d/              # Volumele originale
+│   ├── converted_2d/        # Cadrele 2D extrase (input)
+│   └── processed_2d/        # Seturile de date salvate definitiv
+│
+└── requirements.txt         # Dependențele externe
