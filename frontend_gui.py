@@ -213,6 +213,7 @@ class MorphoApp(ctk.CTk):
             canvas.bind("<MouseWheel>", self._on_zoom)
             canvas.bind("<ButtonPress-1>", self._on_pan_start)
             canvas.bind("<B1-Motion>", self._on_pan_drag)
+            canvas.bind("<ButtonRelease-1>", self._on_mouse_release)  
         self.canvas_proc.bind("<Button-3>", self._show_context_menu)
         self.nav_frame = ctk.CTkFrame(self.main_frame, height=80, corner_radius=10)
         self.nav_frame.grid(row=1, column=0, columnspan=2, padx=15, pady=(0, 15), sticky="ew")
@@ -687,23 +688,57 @@ class MorphoApp(ctk.CTk):
         self._redraw_canvas(self.canvas_proc)
 
     def _on_pan_start(self, event):
-        self._pan_start_x = event.x
-        self._pan_start_y = event.y
+        # Dacă suntem pe planșa procesată și modul desen e activat
+        if event.widget == self.canvas_proc and self.is_drawing_mode:
+            self._draw_start_x = event.x
+            self._draw_start_y = event.y
+            
+            # Creăm un dreptunghi roșu temporar (inițial de dimensiune 0)
+            self.temp_rect_id = self.canvas_proc.create_rectangle(
+                self._draw_start_x, self._draw_start_y, event.x, event.y,
+                outline="red", width=2, dash=(4, 2)
+            )
+        else:
+            # Panning normal
+            self._pan_start_x = event.x
+            self._pan_start_y = event.y
 
     def _on_pan_drag(self, event):
-        dx = event.x - self._pan_start_x
-        dy = event.y - self._pan_start_y
-        
-        self.pan_x += dx
-        self.pan_y += dy
-        
-        # Actualizăm punctul de start pentru următorul frame de mișcare
-        self._pan_start_x = event.x
-        self._pan_start_y = event.y
-        
-        # Redesenăm
-        self._redraw_canvas(self.canvas_orig)
-        self._redraw_canvas(self.canvas_proc)
+        if event.widget == self.canvas_proc and self.is_drawing_mode:
+            # Actualizăm coordonatele dreptunghiului roșu pe măsură ce tragem de mouse
+            if self.temp_rect_id:
+                self.canvas_proc.coords(
+                    self.temp_rect_id,
+                    self._draw_start_x, self._draw_start_y,
+                    event.x, event.y
+                )
+        else:
+            # Panning normal
+            dx = event.x - self._pan_start_x
+            dy = event.y - self._pan_start_y
+            self.pan_x += dx
+            self.pan_y += dy
+            self._pan_start_x = event.x
+            self._pan_start_y = event.y
+            self._redraw_canvas(self.canvas_orig)
+            self._redraw_canvas(self.canvas_proc)
+    def _on_mouse_release(self, event):
+        # Doar dacă am fost în modul desen
+        if event.widget == self.canvas_proc and self.is_drawing_mode:
+            # Oprim modul desen și readucem cursorul la normal
+            self.is_drawing_mode = False
+            self.canvas_proc.configure(cursor="")
+            
+            # Verificăm dacă chenarul e prea mic (click accidental)
+            if abs(event.x - self._draw_start_x) < 5 or abs(event.y - self._draw_start_y) < 5:
+                if self.temp_rect_id:
+                    self.canvas_proc.delete(self.temp_rect_id)
+                self.status_bar.configure(text="Stare: Chenar prea mic. Desenare anulată.")
+                return
+
+            self.status_bar.configure(text="Stare: Chenar fixat. Așteptare etichetă...")
+            print(f"DEBUG: Chenar desenat de la ({self._draw_start_x}, {self._draw_start_y}) până la ({event.x}, {event.y}).")
+            
 
     # ------------------------------------------------------------------
     # Operații pe stivă (acționate din UI)
@@ -749,7 +784,7 @@ class MorphoApp(ctk.CTk):
             self.on_slice_slider_move(self.slice_slider.get())
         else:
             self._refresh_processed_display()
-            
+
     # ------------------------------------------------------------------
     # Funcționalitate Adnotări (Labeling)
     # ------------------------------------------------------------------
@@ -761,7 +796,11 @@ class MorphoApp(ctk.CTk):
             self.context_menu.tk_popup(event.x_root, event.y_root)
 
     def _activate_drawing_mode(self):
-        print("DEBUG: Modul de desenare va fi activat în Pasul 2.")
+        """Pornește modul de desenare după click pe meniul contextual."""
+        if self.pil_image_proc is not None:
+            self.is_drawing_mode = True
+            self.canvas_proc.configure(cursor="crosshair")
+            self.status_bar.configure(text="Stare: Mod desenare activat. Trageți cu click-stânga pentru a crea un chenar.")
         
     def _clear_current_labels(self):
         print("DEBUG: Label-urile vor fi șterse.")
