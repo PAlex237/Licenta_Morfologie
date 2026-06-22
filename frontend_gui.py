@@ -919,4 +919,59 @@ class MorphoApp(ctk.CTk):
             self.status_bar.configure(text=f"Stare: Toate etichetele au fost șterse.")
 
     def _save_slice_with_labels(self):
-        print("DEBUG: Imaginea va fi salvată cu OpenCV în Pasul 4.")
+        """Salvează felia curentă cu adnotările aplicate definitiv via OpenCV."""
+        if not self.pil_image_proc:
+            self.show_custom_message("Eroare", "Nu există o imagine procesată pentru a fi salvată.", "error")
+            return
+
+        labels = self.labels_memory.get(self.current_file_name, [])
+        if not labels:
+            self.show_custom_message("Info", "Nu există etichete pe această imagine. Folosiți butonul standard de salvare.", "info")
+            return
+
+        if self.current_file_name == "imagine_unica":
+            base_img = self.backend.get_processed_image()
+        else:
+            base_img = self.backend.batch_cache.get(self.current_file_name)
+
+        if base_img is None:
+            self.show_custom_message("Eroare", "Nu s-au putut prelua datele din backend.", "error")
+            return
+
+        if base_img.ndim == 2:
+            export_img = cv2.cvtColor(base_img, cv2.COLOR_GRAY2BGR)
+        else:
+            export_img = base_img.copy()
+
+        for lbl in labels:
+            x1, y1, x2, y2 = lbl["x1"], lbl["y1"], lbl["x2"], lbl["y2"]
+            nume = lbl["nume"]
+
+            color = (0, 255, 0) # verde neon
+            thickness = 2
+
+            # Desenăm chenarul principal
+            cv2.rectangle(export_img, (x1, y1), (x2, y2), color, thickness)
+
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.5
+            font_thickness = 1
+            text_size, _ = cv2.getTextSize(nume, font, font_scale, font_thickness)
+            text_w, text_h = text_size
+
+            cv2.rectangle(export_img, (x1, y1 - text_h - 10), (x1 + text_w + 10, y1), color, -1)
+            cv2.putText(export_img, nume, (x1 + 5, y1 - 5), font, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
+
+        # Solicitare locatie de salvare a imaginii
+        sugestie = f"adnotat_{self.current_file_name}" if self.current_file_name != "imagine_unica" else "imagine_adnotata.png"
+        path = filedialog.asksaveasfilename(
+            initialfile=sugestie,
+            defaultextension=".png",
+            filetypes=[("PNG Image", "*.png")]
+        )
+
+        # Salvare pe disc
+        if path:
+            cv2.imwrite(path, export_img)
+            self.show_custom_message("Salvare Reușită", f"Imaginea adnotată a fost salvată:\n{os.path.basename(path)}", "info")
+            self.status_bar.configure(text="Stare: Imagine adnotată salvată cu succes.")
