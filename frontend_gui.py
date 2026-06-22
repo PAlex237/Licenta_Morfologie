@@ -67,6 +67,7 @@ class MorphoApp(ctk.CTk):
         # --- Variabile pentru Labeling (Adnotări) ---
         # Format așteptat: {"slice_001.png": [{"nume": "Tumoare", "x1": 10, "y1": 10, "x2": 50, "y2": 50}], ...}
         self.labels_memory = {} 
+        self.current_file_name = "imagine_unica"
         self.is_drawing_mode = False
         self.temp_rect_id = None
         self._draw_start_x = 0
@@ -323,6 +324,42 @@ class MorphoApp(ctk.CTk):
                       command=dialog.destroy).pack(pady=(10, 20))
         self.wait_window(dialog)
 
+    def _ask_label_name(self) -> Optional[str]:
+        """Dialog hibrid: Selectează din listă sau scrie text propriu."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Etichetă Nouă")
+        w, h = 400, 200
+        self.update_idletasks()
+        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
+        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(dialog, text="Selectați sau introduceți eticheta medicală:", 
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(20, 10))
+
+        optiuni = ["Tumoare", "Edem", "Necroză", "Leziune", "Artefact vizual"]
+        combo = ctk.CTkComboBox(dialog, values=optiuni, width=280)
+        combo.pack(pady=10)
+        combo.set(optiuni[0]) # Setăm prima opțiune by default
+
+        result = [None]
+        def on_confirm():
+            if combo.get().strip():
+                result[0] = combo.get().strip()
+                dialog.destroy()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=15)
+        ctk.CTkButton(btn_frame, text="Confirmă", command=on_confirm, width=110, 
+                      fg_color="#28a745", hover_color="#218838").pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="Anulează", command=dialog.destroy, width=110, 
+                      fg_color="gray", hover_color="#555555").pack(side="left", padx=10)
+
+        self.wait_window(dialog)
+        return result[0]
     def ask_custom_folder_name(self, title: str, prompt: str, initial_value: str) -> Optional[str]:
         dialog = ctk.CTkToplevel(self)
         dialog.title(title)
@@ -527,12 +564,13 @@ class MorphoApp(ctk.CTk):
     def on_slice_slider_move(self, value):
         if not self.slice_files_list:
             return
-
+        
         idx = int(value)
         file_name = self.slice_files_list[idx]
         self.lbl_slice_info.configure(
             text=f"Navigare Felii: {idx + 1} / {len(self.slice_files_list)}  —  [{file_name}]")
 
+        self.current_file_name = file_name
         orig = self.backend.base_data.get(file_name)
         if orig is not None:
             self.display_image(orig, self.canvas_orig)
@@ -599,7 +637,33 @@ class MorphoApp(ctk.CTk):
         # Păstrăm referința pentru Garbage Collector și desenăm!
         canvas.image = tk_image 
         canvas.create_image(center_x, center_y, anchor="center", image=tk_image)
+        
+        # --- Randare Bounding Boxes (Label-uri) ---
+        if canvas == self.canvas_proc and self.current_file_name in self.labels_memory:
+            img_w = pil_img.width
+            img_h = pil_img.height
+            
+            # Convertim înapoi pixelii reali în pixeli de ecran (cu Zoom)
+            def to_canvas_coord(ix, iy):
+                cx = center_x + (ix - img_w / 2) * self.zoom_scale
+                cy = center_y + (iy - img_h / 2) * self.zoom_scale
+                return cx, cy
 
+            for lbl in self.labels_memory[self.current_file_name]:
+                cx1, cy1 = to_canvas_coord(lbl["x1"], lbl["y1"])
+                cx2, cy2 = to_canvas_coord(lbl["x2"], lbl["y2"])
+                
+                # Culoarea standard în industrie (verde electric/neon)
+                color = "#00ff00"
+                
+                # Desenăm chenarul
+                canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=color, width=2)
+                
+                # Desenăm un fundal pentru text ca să fie lizibil pe raze RMN
+                text_len = len(lbl["nume"]) * 7
+                canvas.create_rectangle(cx1, cy1 - 22, cx1 + text_len + 10, cy1, fill=color, outline=color)
+                canvas.create_text(cx1 + 5, cy1 - 11, text=lbl["nume"], fill="black", anchor="w", font=("Arial", 11, "bold"))
+    
     def _clear_canvas(self, canvas):
         """Golește canvas-ul complet, readucând starea la zero."""
         if canvas == self.canvas_orig:
@@ -723,21 +787,65 @@ class MorphoApp(ctk.CTk):
             self._redraw_canvas(self.canvas_orig)
             self._redraw_canvas(self.canvas_proc)
     def _on_mouse_release(self, event):
-        # Doar dacă am fost în modul desen
         if event.widget == self.canvas_proc and self.is_drawing_mode:
-            # Oprim modul desen și readucem cursorul la normal
             self.is_drawing_mode = False
             self.canvas_proc.configure(cursor="")
-            
-            # Verificăm dacă chenarul e prea mic (click accidental)
+
             if abs(event.x - self._draw_start_x) < 5 or abs(event.y - self._draw_start_y) < 5:
                 if self.temp_rect_id:
                     self.canvas_proc.delete(self.temp_rect_id)
                 self.status_bar.configure(text="Stare: Chenar prea mic. Desenare anulată.")
                 return
 
-            self.status_bar.configure(text="Stare: Chenar fixat. Așteptare etichetă...")
-            print(f"DEBUG: Chenar desenat de la ({self._draw_start_x}, {self._draw_start_y}) până la ({event.x}, {event.y}).")
+            # 1. Cerem eticheta (se deschide dialogul creat mai sus)
+            label_name = self._ask_label_name()
+            
+            # Ștergem chenarul temporar (îl vom redesena permanent)
+            if self.temp_rect_id:
+                self.canvas_proc.delete(self.temp_rect_id)
+
+            if not label_name:
+                self.status_bar.configure(text="Stare: Adăugare etichetă anulată.")
+                return
+
+            # 2. Conversie matematică: Canvas (ce vezi) -> Imaginea Sursă (pixeli reali)
+            w = max(self.canvas_proc.winfo_width(), 400)
+            h = max(self.canvas_proc.winfo_height(), 400)
+            center_x = (w // 2) + self.pan_x
+            center_y = (h // 2) + self.pan_y
+            
+            img_w = self.pil_image_proc.width
+            img_h = self.pil_image_proc.height
+
+            # Formula de transformare
+            def to_img_coord(cx, cy):
+                ix = (cx - center_x) / self.zoom_scale + img_w / 2
+                iy = (cy - center_y) / self.zoom_scale + img_h / 2
+                return int(ix), int(iy)
+
+            ix1, iy1 = to_img_coord(self._draw_start_x, self._draw_start_y)
+            ix2, iy2 = to_img_coord(event.x, event.y)
+
+            # Ne asigurăm că punctele nu ies din marginea imaginii
+            real_x1 = max(0, min(ix1, ix2, img_w))
+            real_y1 = max(0, min(iy1, iy2, img_h))
+            real_x2 = min(img_w, max(ix1, ix2, 0))
+            real_y2 = min(img_h, max(iy1, iy2, 0))
+
+            # 3. Salvăm în memoria dicționarului
+            if self.current_file_name not in self.labels_memory:
+                self.labels_memory[self.current_file_name] = []
+            
+            self.labels_memory[self.current_file_name].append({
+                "nume": label_name,
+                "x1": real_x1, "y1": real_y1,
+                "x2": real_x2, "y2": real_y2
+            })
+
+            self.status_bar.configure(text=f"Stare: Label '{label_name}' salvat în memorie.")
+            
+            # 4. Forțăm ecranul să se redeseneze pentru a afișa rezultatul
+            self._redraw_canvas(self.canvas_proc)
             
 
     # ------------------------------------------------------------------
@@ -764,7 +872,8 @@ class MorphoApp(ctk.CTk):
         self.backend.image_processed = None
         self.backend.base_data = {}
         self.backend.batch_cache = {}
-
+        self.labels_memory = {}
+        self.current_file_name = "imagine_unica"
         # 3. Resetare elemente de navigare UI
         self.active_batch_folder = None
         self.slice_files_list = []
@@ -803,7 +912,11 @@ class MorphoApp(ctk.CTk):
             self.status_bar.configure(text="Stare: Mod desenare activat. Trageți cu click-stânga pentru a crea un chenar.")
         
     def _clear_current_labels(self):
-        print("DEBUG: Label-urile vor fi șterse.")
+        """Șterge toate adnotările de pe imaginea curentă."""
+        if self.current_file_name in self.labels_memory:
+            self.labels_memory[self.current_file_name] = []
+            self._redraw_canvas(self.canvas_proc)
+            self.status_bar.configure(text=f"Stare: Toate etichetele au fost șterse.")
 
     def _save_slice_with_labels(self):
         print("DEBUG: Imaginea va fi salvată cu OpenCV în Pasul 4.")
