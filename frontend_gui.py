@@ -7,7 +7,7 @@ import os
 import cv2
 import customtkinter as ctk
 from tkinter import filedialog
-from PIL import Image
+from PIL import Image, ImageTk
 from typing import List, Optional
 
 from backend_morph import MorphoBackend, Operatie
@@ -53,6 +53,15 @@ class MorphoApp(ctk.CTk):
         self._focus_mode: bool = False          # Flag explicit – nu mai citim vizibilitatea widget-ului
         self._drag_start_y: int = 0
         self._drag_start_index: int = 0
+
+        # Variabile pentru Zoom 
+        self.zoom_scale: float = 1.0
+        self.pan_x: int = 0
+        self.pan_y: int = 0
+        self._pan_start_x: int = 0
+        self._pan_start_y: int = 0
+        self.pil_image_orig: Optional[Image.Image] = None
+        self.pil_image_proc: Optional[Image.Image] = None
 
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
@@ -176,15 +185,22 @@ class MorphoApp(ctk.CTk):
         frame_orig.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
         ctk.CTkLabel(frame_orig, text="Imagine Originală / Sursă",
                      font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
-        self.lbl_orig_img = ctk.CTkLabel(frame_orig, text="Așteptare input...", text_color="gray")
-        self.lbl_orig_img.pack(expand=True, fill="both", padx=15, pady=15)
+                     
+        self.canvas_orig = ctk.CTkCanvas(frame_orig, bg="#1e1e1e", highlightthickness=0)
+        self.canvas_orig.pack(expand=True, fill="both", padx=15, pady=15)
 
         frame_proc = ctk.CTkFrame(self.main_frame, corner_radius=10)
         frame_proc.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
         ctk.CTkLabel(frame_proc, text="Rezultat Procesare (Previzualizare)",
                      font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
-        self.lbl_proc_img = ctk.CTkLabel(frame_proc, text="Așteptare prelucrare...", text_color="gray")
-        self.lbl_proc_img.pack(expand=True, fill="both", padx=15, pady=15)
+                     
+        self.canvas_proc = ctk.CTkCanvas(frame_proc, bg="#1e1e1e", highlightthickness=0)
+        self.canvas_proc.pack(expand=True, fill="both", padx=15, pady=15)
+
+        for canvas in (self.canvas_orig, self.canvas_proc):
+            canvas.bind("<MouseWheel>", self._on_zoom)
+            canvas.bind("<ButtonPress-1>", self._on_pan_start)
+            canvas.bind("<B1-Motion>", self._on_pan_drag)
 
         self.nav_frame = ctk.CTkFrame(self.main_frame, height=80, corner_radius=10)
         self.nav_frame.grid(row=1, column=0, columnspan=2, padx=15, pady=(0, 15), sticky="ew")
@@ -350,7 +366,7 @@ class MorphoApp(ctk.CTk):
             self.active_batch_folder = None       
             self.btn_save_batch.configure(state="disabled") 
 
-            self.display_image(self.backend.get_original_image(), self.lbl_orig_img)
+            self.display_image(self.backend.get_original_image(), self.canvas_orig)
             
             self._clear_processed_label()       
             
@@ -498,44 +514,92 @@ class MorphoApp(ctk.CTk):
 
         orig = self.backend.base_data.get(file_name)
         if orig is not None:
-            self.display_image(orig, self.lbl_orig_img)
+            self.display_image(orig, self.canvas_orig)
 
         proc = self.backend.batch_cache.get(file_name)
         if proc is not None:
-            self.display_image(proc, self.lbl_proc_img)
+            self.display_image(proc, self.canvas_proc)
         else:
             self._clear_processed_label()
 
     # ------------------------------------------------------------------
-    # Afișare imagini
+    # Afișare imagini pe Canvas
     # ------------------------------------------------------------------
 
-    def display_image(self, cv_img, lbl):
-        """Convertește o matrice OpenCV (grayscale sau BGR) și o afișează."""
+    def display_image(self, cv_img, target_canvas):
+        """Preia matricea OpenCV, o salvează ca PIL și o randează pe Canvas."""
         if cv_img is None:
             return
+            
         if cv_img.ndim == 2:
             rgb = cv2.cvtColor(cv_img, cv2.COLOR_GRAY2RGB)
         else:
             rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
 
         pil_img = Image.fromarray(rgb)
-        ctk_img = ctk.CTkImage(pil_img, size=(700, 700))
-        lbl.configure(image=ctk_img, text="")
-        lbl.image = ctk_img  # Prevenim garbage collection
-    def _clear_label_image(self, lbl, placeholder_text):
-        dummy_img = ctk.CTkImage(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), size=(1, 1))
-        lbl.configure(image=dummy_img, text=placeholder_text)
-        lbl.image = dummy_img  # Ștergem complet vechea referință din memoria RAM
+        
+        # Memorăm imaginea brută în funcție de canvas-ul destinație
+        if target_canvas == self.canvas_orig:
+            self.pil_image_orig = pil_img
+        else:
+            self.pil_image_proc = pil_img
+            
+        self._redraw_canvas(target_canvas)
+
+    def _redraw_canvas(self, canvas):
+        """Desenează imaginea pe canvas aplicând calculele de Zoom și Panning."""
+        canvas.delete("all")  # Curățăm desenul anterior
+        
+        # Alegem sursa corectă
+        pil_img = self.pil_image_orig if canvas == self.canvas_orig else self.pil_image_proc
+        
+        # Calculăm centrul planșei (aici ne asigurăm că nu e lățime 0 la start)
+        w, h = max(canvas.winfo_width(), 400), max(canvas.winfo_height(), 400)
+        center_x = (w // 2) + self.pan_x
+        center_y = (h // 2) + self.pan_y
+
+        if pil_img is None:
+            # Afișăm textul dacă nu există imagine
+            text = "Așteptare input..." if canvas == self.canvas_orig else "Așteptare prelucrare..."
+            canvas.create_text(w//2, h//2, text=text, fill="gray", font=("Arial", 14))
+            return
+
+        # Redimensionare (Image.Resampling.NEAREST e perfect pentru imagini medicale 
+        # fiindcă păstrează contururile clare ale pixelilor originali când dai zoom)
+        new_width = int(pil_img.width * self.zoom_scale)
+        new_height = int(pil_img.height * self.zoom_scale)
+        
+        if new_width <= 0 or new_height <= 0:
+            return
+            
+        resized_pil = pil_img.resize((new_width, new_height), Image.Resampling.NEAREST)
+        tk_image = ImageTk.PhotoImage(resized_pil)
+        
+        # Păstrăm referința pentru Garbage Collector și desenăm!
+        canvas.image = tk_image 
+        canvas.create_image(center_x, center_y, anchor="center", image=tk_image)
+
+    def _clear_canvas(self, canvas):
+        """Golește canvas-ul complet, readucând starea la zero."""
+        if canvas == self.canvas_orig:
+            self.pil_image_orig = None
+        else:
+            self.pil_image_proc = None
+            
+        # Resetăm zoom-ul la normal când se șterge imaginea
+        self.zoom_scale = 1.0
+        self.pan_x = 0
+        self.pan_y = 0
+        self._redraw_canvas(canvas)
 
     def _clear_processed_label(self):
-        self._clear_label_image(self.lbl_proc_img, "Așteptare prelucrare...")
+        self._clear_canvas(self.canvas_proc)
 
     def _refresh_processed_display(self):
         """Actualizează panoul cu rezultatul procesării (mod Single Image)."""
         img = self.backend.get_processed_image()
         if img is not None:
-            self.display_image(img, self.lbl_proc_img)
+            self.display_image(img, self.canvas_proc)
         else:
             self._clear_processed_label()
 
@@ -585,6 +649,41 @@ class MorphoApp(ctk.CTk):
             if moved:
                 self.render_session_timeline()
                 self._update_display_after_stack_change()
+    # ------------------------------------------------------------------
+    # Interacțiune pe Canvas (Zoom & Panning)
+    # ------------------------------------------------------------------
+
+    def _on_zoom(self, event):
+        if event.delta > 0:
+            self.zoom_scale *= 1.15  # Zoom In 15%
+        elif event.delta < 0:
+            self.zoom_scale /= 1.15  # Zoom Out 15%
+        
+        # Limităm zoom-ul între 10% și 1000%
+        self.zoom_scale = max(0.1, min(self.zoom_scale, 10.0))
+        
+        # Redesenăm pe ecran ambele imagini
+        self._redraw_canvas(self.canvas_orig)
+        self._redraw_canvas(self.canvas_proc)
+
+    def _on_pan_start(self, event):
+        self._pan_start_x = event.x
+        self._pan_start_y = event.y
+
+    def _on_pan_drag(self, event):
+        dx = event.x - self._pan_start_x
+        dy = event.y - self._pan_start_y
+        
+        self.pan_x += dx
+        self.pan_y += dy
+        
+        # Actualizăm punctul de start pentru următorul frame de mișcare
+        self._pan_start_x = event.x
+        self._pan_start_y = event.y
+        
+        # Redesenăm
+        self._redraw_canvas(self.canvas_orig)
+        self._redraw_canvas(self.canvas_proc)
 
     # ------------------------------------------------------------------
     # Operații pe stivă (acționate din UI)
@@ -617,8 +716,8 @@ class MorphoApp(ctk.CTk):
         self.nav_frame.grid_remove()
         self.btn_save_batch.configure(state="disabled")
 
-        self._clear_label_image(self.lbl_orig_img, "Așteptare input...")
-        self._clear_label_image(self.lbl_proc_img, "Așteptare prelucrare...")
+        self._clear_canvas(self.canvas_orig)
+        self._clear_canvas(self.canvas_proc)
 
         # 4. Re-randăm UI-ul
         self.render_session_timeline()
