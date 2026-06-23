@@ -16,4 +16,5 @@ HARTA_INTENSITATE = {
     "Fină":      3,
     "Medie":     5,
     "Puternică": 7,
+    "Extremă":   15,
 }
