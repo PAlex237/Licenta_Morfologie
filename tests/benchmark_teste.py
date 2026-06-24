@@ -22,8 +22,7 @@ def add_salt_and_pepper_noise(image, amount=0.05):
     return noisy
 
 def run_benchmark():
-    # 1. ÎNREGISTREAZĂ CALEA CĂTRE O IMAGINE CURATĂ DIN PROIECTUL TĂU
-    cale_imagine = ".\\datasets\\converted_2d\\sub-18_ses-01_T1w1019\\slice_167.png" # <--- MODIFICĂ AICI
+    cale_imagine = ".\\datasets\\converted_2d\\sub-18_ses-01_T1w1019\\slice_167.png" 
     
     img_originala = cv2.imread(cale_imagine, cv2.IMREAD_GRAYSCALE)
     if img_originala is None:
@@ -48,7 +47,6 @@ def run_benchmark():
         tracemalloc.start()
         start_time = time.perf_counter()
         
-        # Aplicăm "Filtrare Zgomot de Fond" (Deschidere)
         img_procesata = cv2.morphologyEx(img_zgomot, cv2.MORPH_OPEN, kernel)
         
         timp_executie_ms = (time.perf_counter() - start_time) * 1000
@@ -61,7 +59,6 @@ def run_benchmark():
         scor_psnr = psnr(img_originala, img_procesata)
         scor_ssim = ssim(img_originala, img_procesata, data_range=255)
 
-        # Afișăm rezultatele
         print(f"{nume:<15} | {timp_executie_ms:<10.2f} | {peak_ram_mb:<10.2f} | {scor_psnr:<10.2f} | {scor_ssim:<10.3f}")
 
 if __name__ == "__main__":
