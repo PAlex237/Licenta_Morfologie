@@ -45,19 +45,19 @@ Proiectul este optimizat pentru preprocesarea imaginilor obținute prin Rezonan�
 * **Kernel Ajustabil:** Suport pentru elemente structurante pătratice dinamice (dimensiuni impare 3x3, 5x5, 7x7).
 
 ---
-
 ## 📊 Evaluare Cantitativă și Benchmark
 
 Pentru a valida eficiența și acuratețea algoritmilor morfologici în afara limitărilor interfeței grafice, proiectul include un modul dedicat de benchmark. Acesta evaluează:
 * **Performanța Computațională:** Timpul de execuție per cadru (în ms) și consumul maxim de memorie RAM (în MB) utilizând modulul `tracemalloc`.
-* **Calitatea Imaginii (Acuratețea Diagnostică):** Algoritmii sunt evaluați folosind metrici standard din industrie — **PSNR** (Peak Signal-to-Noise Ratio) și **SSIM** (Structural Similarity Index Measure) prin intermediul bibliotecii `scikit-image`.
+* **Performanța Arhitecturală (I/O):** Compararea latențelor de sistem între arhitectura *In-Memory Cache* și salvarea clasică pe partiția de stocare (SSD).
+* **Calitatea Imaginii (Acuratețea Diagnostică):** Algoritmii sunt evaluați folosind metrici standard din industrie — **PSNR** (Peak Signal-to-Noise Ratio) și **SSIM** (Structural Similarity Index Measure).
 
 **Rularea testelor locale:**
-Pentru a genera tabelul de evaluare direct în terminal, rulați:
+Pentru a genera rezultatele de evaluare calitativă și timpii de latență, rulați:
 ```bash
 python tests/benchmark_teste.py
+python tests/benchmark_ram_vs_disk.py
 ```
-
 ---
 
 ## 🛠️ Tehnologii și Arhitectură
@@ -89,7 +89,8 @@ Licenta_Morfologie/
 │   └── convert_nii.py       # Convertor standalone CLI pentru volume 3D
 │
 ├── tests/                   # Evaluare de performanță și testare
-│   └── benchmark_teste.py   # Script pentru calcul PSNR, SSIM, Timp și RAM
+│   ├── benchmark_teste.py       # Benchmark calitativ (PSNR, SSIM, RAM)
+│   └── benchmark_ram_vs_disk.py # Benchmark arhitectural (I/O Latență)
 │
 ├── datasets/                # Stocare (ignorat în versionare)
 │   ├── raw_3d/              # Volumele originale
