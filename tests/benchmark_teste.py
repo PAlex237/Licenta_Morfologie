@@ -5,20 +5,15 @@ import tracemalloc
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 
-def add_salt_and_pepper_noise(image, amount=0.05):
-    """Adaugă zgomot artificial pentru a avea ce filtra."""
-    row, col = image.shape
+def add_salt_noise(image, amount=0.05):
+    """Adaugă zgomot de tip sare (puncte luminoase izolate) pentru a fi filtrat prin Deschidere."""
     noisy = np.copy(image)
     
-    # Adăugare Sare (pixeli albi)
-    num_salt = np.ceil(amount * image.size * 0.5)
+    # Adăugare exclusivă de Sare (pixeli albi)
+    num_salt = np.ceil(amount * image.size) # Aplicăm tot procentul de 5% pe sare
     coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
     noisy[tuple(coords)] = 255
 
-    # Adăugare Piper (pixeli negri)
-    num_pepper = np.ceil(amount * image.size * 0.5)
-    coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
-    noisy[tuple(coords)] = 0
     return noisy
 
 def run_benchmark():
@@ -30,7 +25,7 @@ def run_benchmark():
         return
 
     # Creăm o versiune cu zgomot pentru test
-    img_zgomot = add_salt_and_pepper_noise(img_originala, amount=0.05)
+    img_zgomot = add_salt_noise(img_originala, amount=0.05)
     
     # Definim kernel-urile pentru test (Fin, Mediu, Puternic)
     kernels = {
