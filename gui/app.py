@@ -22,7 +22,7 @@ class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Proiect Licență - Procesare Imagistică")
+        self.title("Morfomed")
         self.geometry("1200x850")
         
         # dăm maximize la fereastră imediat cum pornește
